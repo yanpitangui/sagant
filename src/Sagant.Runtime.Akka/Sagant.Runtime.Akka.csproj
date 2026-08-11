@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Akka.NET runtime for Sagant: drives Workflow&lt;TState&gt; via a persistent
+      ClusterSharding entity actor (step/workflow/pause timeouts, retry + compensation, graceful
+      handoff, tracing). The reference implementation of Sagant's IWorkflowClient/IWorkflowHandle
+      contract.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Akka" />
+    <PackageReference Include="Akka.Cluster.Sharding" />
+    <PackageReference Include="Akka.Persistence" />
+    <PackageReference Include="Akka.Persistence.Query" />
+    <PackageReference Include="Akka.Hosting" />
+    <PackageReference Include="Akka.Cluster.Hosting" />
+    <!-- Pin transitive OpenTelemetry.Api to the CPM version; Akka.* pulls an older,
+         vulnerable version and CentralPackageTransitivePinningEnabled is off (see NU1902). -->
+    <PackageReference Include="OpenTelemetry.Api" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sagant\Sagant.csproj" />
+  </ItemGroup>
+
+</Project>

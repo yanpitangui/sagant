@@ -1,0 +1,63 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Sagant\Sagant.csproj" />
+    <ProjectReference Include="..\..\..\src\Sagant.Runtime.Akka\Sagant.Runtime.Akka.csproj" />
+    <!-- Sagant's own package now bundles this generator under analyzers/dotnet/cs (see
+         Sagant.csproj), so a real `PackageReference Include="Sagant"` consumer needs nothing else.
+         This sample uses in-repo ProjectReferences instead, though, and MSBuild's OutputItemType
+         =Analyzer classification is local to the project that declares it — it does NOT flow
+         transitively through a second ProjectReference hop (Sample -> Sagant -> SourceGenerators),
+         unlike a real NuGet package dependency graph. So this explicit reference stays required for
+         as long as this sample builds against ProjectReferences rather than the packed nupkg. -->
+    <ProjectReference Include="..\..\..\src\Sagant.SourceGenerators\Sagant.SourceGenerators.csproj"
+                       OutputItemType="Analyzer"
+                       ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Akka.Cluster.Hosting" Version="1.5.70" />
+    <PackageReference Include="Akka.Cluster.Sharding" Version="1.5.70" />
+    <PackageReference Include="Akka.Remote.Hosting" Version="1.5.70" />
+    <PackageReference Include="Akka.Streams" Version="1.5.70" />
+    <!-- Service-side halves of the AppHost's AddAkka(...).WithClustering(redis) (see
+         OrderFulfillment.AppHost's Program.cs): WithAspireClusterBootstrap reads the env vars that
+         wires into, and WithRedisDiscovery is the peer-discovery backend it feeds Akka.Management's
+         ClusterBootstrap. Replaces the manual WithRemoting/WithClustering/self-join dance a
+         single-node host doesn't need Aspire's replica-peer-discovery problem to solve. -->
+    <PackageReference Include="Aaron.Akka.Aspire" Version="0.2.1" />
+    <PackageReference Include="Aaron.Akka.Discovery.Redis" Version="0.2.1" />
+    <!-- Not Akka.Persistence.PostgreSql(.Hosting) — that line is pinned at 1.5.37 upstream and
+         doesn't track Akka core's abstract-class shape past that point, the same trap that ruled
+         out Akka.Persistence.Sqlite here earlier (pinned 1.5.39, TypeLoadException against core
+         1.5.70, plus an unpatched high-severity SQLitePCLRaw CVE — see Sagant.Tests). Akka.Persistence.Sql
+         is the actively-maintained, provider-agnostic (Linq2Db-based) successor and tracks core
+         1:1 — same 1.5.70 as everything else here. -->
+    <PackageReference Include="Akka.Persistence.Sql" Version="1.5.70" />
+    <PackageReference Include="Akka.Persistence.Sql.Hosting" Version="1.5.70" />
+    <PackageReference Include="Npgsql" Version="9.0.3" />
+    <!-- Already a transitive dependency of Akka.Persistence.Sql (that library's own SQL layer is
+         built on it) — referenced directly here too because OrderReadModelRepository uses it for the
+         demo's own read-model tables, a separate concern from the engine's journal/snapshot store
+         even though both share the same Postgres connection string. -->
+    <PackageReference Include="linq2db" Version="5.4.1.9" />
+    <!-- No explicit Microsoft.Extensions.Hosting/AspNetCore package refs needed — Sdk.Web's
+         FrameworkReference to Microsoft.AspNetCore.App brings both the generic host and Blazor
+         Server (Microsoft.AspNetCore.Components.Server) in at the runtime's own version. -->
+    <!-- SDK (not just Api, already referenced transitively via Sagant.Runtime.Akka) + OTLP exporter —
+         lets this host actually export the workflow engine's Activity spans and structured logs
+         somewhere. AddOtlpExporter() reads OTEL_EXPORTER_OTLP_ENDPOINT from the environment by
+         default, which the Aspire AppHost injects automatically when running under it; standalone
+         `dotnet run` just has nothing to send to and no-ops. -->
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

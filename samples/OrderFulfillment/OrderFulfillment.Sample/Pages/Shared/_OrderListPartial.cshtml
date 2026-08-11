@@ -1,0 +1,29 @@
+@using OrderFulfillment.Sample
+@model IReadOnlyList<OrderSnapshot>
+@functions {
+    private static string StatusClass(OrderSnapshot order) => order.State switch
+    {
+        DisplayState.Succeeded => "status-ok",
+        DisplayState.Failed => "status-fail",
+        DisplayState.Paused => "status-paused",
+        _ => "status-running",
+    };
+
+    private static string StatusIcon(OrderSnapshot order) => order.State switch
+    {
+        DisplayState.Succeeded => "✓",
+        DisplayState.Failed => "✗",
+        DisplayState.Paused => "⏸",
+        _ => "●",
+    };
+}
+<div id="order-list" data-selected="@ViewData["SelectedOrderId"]">
+    @foreach (var order in Model)
+    {
+        <div class="order-row @StatusClass(order) @(order.WorkflowId == (string?)ViewData["SelectedOrderId"] ? "selected" : "")"
+             data-order-id="@order.WorkflowId">
+            <span class="order-id">@order.WorkflowId</span>
+            <span class="order-icon">@StatusIcon(order)</span>
+        </div>
+    }
+</div>

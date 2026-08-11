@@ -1,0 +1,332 @@
+:root {
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --panel: #f9fafb;
+    --ok: #1a9450;
+    --ok-bg: #eafaf1;
+    --fail: #c53030;
+    --fail-bg: #fdecec;
+    --paused: #b7791f;
+    --paused-bg: #fef6e7;
+    --running: #2563eb;
+    --running-bg: #eaf1fe;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #14161a;
+        --fg: #e8e8e8;
+        --muted: #9aa0a6;
+        --border: #2a2d33;
+        --panel: #1b1e24;
+        --ok-bg: #103322;
+        --fail-bg: #3a1414;
+        --paused-bg: #3a2e0a;
+        --running-bg: #12233f;
+    }
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+}
+
+.app-shell {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 16px;
+}
+
+.app-header {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+}
+
+.layout {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+}
+
+.rail {
+    min-width: 220px;
+    max-width: 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+#order-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.new-order-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+    margin-bottom: 8px;
+}
+
+.new-order-bar input,
+.new-order-bar select,
+.new-order-bar button {
+    font-size: 0.85rem;
+    padding: 5px 6px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--fg);
+}
+
+.place-button {
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.place-button:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.item-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.item-row {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.item-row .amount-input {
+    flex: 1;
+}
+
+.remove-item-button {
+    flex: 0 0 auto;
+    width: 24px;
+    cursor: pointer;
+    color: var(--muted);
+}
+
+.add-item-button {
+    cursor: pointer;
+    align-self: flex-start;
+    background: none;
+    color: var(--running);
+    border-color: transparent !important;
+    padding: 2px 0 !important;
+}
+
+.order-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.order-row.selected {
+    border-color: var(--running);
+    box-shadow: 0 0 0 1px var(--running);
+}
+
+.order-row.status-ok { background: var(--ok-bg); }
+.order-row.status-fail { background: var(--fail-bg); }
+.order-row.status-paused { background: var(--paused-bg); }
+.order-row.status-running { background: var(--running-bg); }
+
+#order-detail {
+    flex: 1;
+    min-width: 0;
+}
+
+.detail.empty {
+    color: var(--muted);
+    padding: 24px;
+}
+
+.banner {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 14px;
+    font-size: 0.9rem;
+}
+
+.banner-ok { background: var(--ok-bg); color: var(--ok); }
+.banner-fail { background: var(--fail-bg); color: var(--fail); }
+.banner-paused { background: var(--paused-bg); color: var(--paused); }
+
+.banner-paused .countdown {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.banner button {
+    margin-left: auto;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 6px;
+    background: var(--paused);
+    color: white;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.banner button:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.banner-tombstone { background: var(--panel); color: var(--muted); }
+
+.detail-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 10px;
+}
+
+.delete-button {
+    padding: 5px 12px;
+    border: 1px solid var(--fail);
+    border-radius: 6px;
+    background: none;
+    color: var(--fail);
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.step-pipeline {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.step-node {
+    flex: 1;
+    min-width: 100px;
+    text-align: center;
+    padding: 12px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+}
+
+.step-node.step-running { background: var(--running-bg); color: var(--running); }
+.step-node.step-ok { background: var(--ok-bg); color: var(--ok); }
+.step-node.step-fail { background: var(--fail-bg); color: var(--fail); }
+
+.step-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.step-meta {
+    font-size: 0.75rem;
+    opacity: 0.85;
+    margin-top: 2px;
+}
+
+.child-group {
+    flex-basis: 100%;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: -4px 0 8px 24px;
+    padding-left: 10px;
+    border-left: 2px dashed var(--border);
+}
+
+.child-card {
+    flex: 1;
+    min-width: 220px;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+}
+
+.child-card-header {
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.child-card .step-pipeline {
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.child-card .step-node {
+    padding: 6px 4px;
+    min-width: 70px;
+}
+
+.child-card .step-name {
+    font-size: 0.75rem;
+}
+
+.child-card .step-meta {
+    font-size: 0.68rem;
+}
+
+.child-card .log {
+    max-height: 90px;
+    font-size: 0.7rem;
+}
+
+.child-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.child-status-dot.child-status-succeeded { background: var(--ok); }
+.child-status-dot.child-status-failed { background: var(--fail); }
+.child-status-dot.child-status-paused { background: var(--paused); }
+.child-status-dot.child-status-running { background: var(--running); }
+
+.log {
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 0.78rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    max-height: 320px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column-reverse;
+}
+
+.log-line {
+    padding: 1px 0;
+    color: var(--muted);
+}

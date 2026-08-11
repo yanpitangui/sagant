@@ -1,0 +1,19 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Akka" Version="1.5.70" />
+    <PackageVersion Include="Akka.Cluster.Sharding" Version="1.5.70" />
+    <PackageVersion Include="Akka.Persistence" Version="1.5.70" />
+    <PackageVersion Include="Akka.Persistence.Query" Version="1.5.70" />
+    <PackageVersion Include="Akka.Hosting" Version="1.5.70" />
+    <PackageVersion Include="Akka.Cluster.Hosting" Version="1.5.70" />
+    <PackageVersion Include="OpenTelemetry.Api" Version="1.17.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="4.14.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="8.6.0" />
+  </ItemGroup>
+</Project>

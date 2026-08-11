@@ -1,0 +1,7 @@
+@page "/fragments/order-list"
+@model OrderListFragmentModel
+@{
+    Layout = null;
+    ViewData["SelectedOrderId"] = Model.SelectedOrderId;
+}
+<partial name="_OrderListPartial" model="Model.Orders" view-data="ViewData" />

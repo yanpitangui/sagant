@@ -1,0 +1,128 @@
+name: Publish NuGet Packages
+
+on:
+  release:
+    types: [created, published]
+  workflow_dispatch:
+    inputs:
+      package_version:
+        description: Package version to publish
+        required: true
+      package_release_notes:
+        description: Release notes to embed in the NuGet package
+        required: false
+
+env:
+  NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+
+concurrency:
+  group: publish-${{ github.event.release.tag_name || inputs.package_version }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup dotnet
+        uses: actions/setup-dotnet@v6.0.0
+        with:
+          dotnet-version: 10.x
+
+      - name: Cache NuGet Packages
+        uses: actions/cache@v6
+        with:
+          key: nuget-${{ hashFiles('src/Directory.Packages.props') }}
+          path: ~/.nuget/packages
+
+      - name: Resolve package version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+          else
+            VERSION="${{ inputs.package_version }}"
+          fi
+
+          VERSION="${VERSION#v}"
+
+          if [ -z "$VERSION" ]; then
+            echo "Package version is required" >&2
+            exit 1
+          fi
+
+          echo "PACKAGE_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Resolved version: $VERSION"
+
+      - name: Generate ReleaseNotes.props
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            printf "%s" "${{ github.event.release.body }}" > release_notes.txt
+          else
+            printf "%s" "${{ inputs.package_release_notes }}" > release_notes.txt
+          fi
+
+          {
+            echo '<Project>'
+            echo '  <PropertyGroup>'
+            echo '    <PackageReleaseNotes>'
+            sed \
+              -e 's/&/\&amp;/g' \
+              -e 's/</\&lt;/g' \
+              -e 's/>/\&gt;/g' \
+              -e "s/'/\&apos;/g" \
+              -e 's/"/\&quot;/g' \
+              release_notes.txt
+            echo '    </PackageReleaseNotes>'
+            echo '  </PropertyGroup>'
+            echo '</Project>'
+          } > ReleaseNotes.props
+
+      - name: Restore
+        run: dotnet restore Sagant.slnx
+
+      - name: Build
+        run: dotnet build Sagant.slnx --no-restore -c Release
+
+      - name: Pack
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          mkdir -p .artifacts
+
+          for project in src/**/*.csproj; do
+            if grep -Eq '<IsPackable>\s*false\s*</IsPackable>' "$project"; then
+              echo "Skipping non-packable: $project"
+              continue
+            fi
+
+            echo "Packing: $project"
+            dotnet pack "$project" \
+              --no-build \
+              -c Release \
+              -o .artifacts \
+              -p:PackageVersion="$PACKAGE_VERSION" \
+              -p:Copyright="© Copyright Sagant $(date +%Y)" \
+              -p:CustomAfterMicrosoftCommonProps="$(pwd)/ReleaseNotes.props"
+          done
+
+      - name: Push NuGet packages
+        if: env.NUGET_API_KEY != ''
+        run: |
+          dotnet nuget push ".artifacts/*.nupkg" \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
+      - name: Push symbol packages
+        if: env.NUGET_API_KEY != ''
+        run: |
+          dotnet nuget push ".artifacts/*.snupkg" \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate

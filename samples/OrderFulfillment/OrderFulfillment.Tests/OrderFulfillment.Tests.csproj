@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Akka.Cluster.Hosting" Version="1.5.70" />
+    <PackageReference Include="Akka.Persistence.TestKit" Version="1.5.70" />
+    <PackageReference Include="Akka.Remote.Hosting" Version="1.5.70" />
+    <PackageReference Include="Akka.TestKit.Xunit2" Version="1.5.70" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.9" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OrderFulfillment.Sample\OrderFulfillment.Sample.csproj" />
+    <ProjectReference Include="..\..\..\src\Sagant\Sagant.csproj" />
+    <ProjectReference Include="..\..\..\src\Sagant.Testing\Sagant.Testing.csproj" />
+    <ProjectReference Include="..\..\..\src\Sagant.Runtime.Akka\Sagant.Runtime.Akka.csproj" />
+  </ItemGroup>
+
+</Project>

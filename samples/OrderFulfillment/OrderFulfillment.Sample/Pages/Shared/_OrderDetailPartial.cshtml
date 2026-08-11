@@ -1,0 +1,53 @@
+@using OrderFulfillment.Sample
+@model OrderSnapshot?
+<div id="order-detail">
+    @if (Model is null)
+    {
+        <div class="detail empty">Select or place an order.</div>
+    }
+    else if (Model.Deleted)
+    {
+        <div class="detail">
+            <div class="banner banner-tombstone">🗑 Deleted — @Model.WorkflowId</div>
+        </div>
+    }
+    else
+    {
+        <div class="detail">
+            @if (Model.State == DisplayState.Paused)
+            {
+                <div class="banner banner-paused">
+                    <span>⏸ Paused — @Model.PauseReason</span>
+                    @if (Model.AutoCancelAt is { } deadline)
+                    {
+                        <span class="countdown" data-deadline="@deadline.ToUnixTimeMilliseconds()">--:--</span>
+                    }
+                    <form data-approve-form method="post" asp-page="/OrderDetailFragment" asp-route-id="@Model.WorkflowId" asp-page-handler="Approve">
+                        @Html.AntiForgeryToken()
+                        <button type="submit">Approve</button>
+                    </form>
+                </div>
+            }
+            else if (Model.State == DisplayState.Failed)
+            {
+                <div class="banner banner-fail">✗ @Model.StatusText@(Model.FailureReason is { } r ? $" ({r})" : "")</div>
+            }
+            else if (Model.State == DisplayState.Succeeded)
+            {
+                <div class="banner banner-ok">✓ Succeeded</div>
+            }
+
+            @if (Model.State is DisplayState.Succeeded or DisplayState.Failed)
+            {
+                <div class="detail-actions">
+                    <form data-delete-form method="post" asp-page="/OrderDetailFragment" asp-route-id="@Model.WorkflowId" asp-page-handler="Delete">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="delete-button">Delete</button>
+                    </form>
+                </div>
+            }
+
+            <partial name="_WorkflowPipelinePartial" model="Model" />
+        </div>
+    }
+</div>

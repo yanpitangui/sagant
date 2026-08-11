@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <IncludeSymbols>false</IncludeSymbols>
+    <IsAotCompatible>false</IsAotCompatible>
+    <!-- Not published as its own NuGet package: Sagant.csproj bundles this project's DLL directly
+         into the analyzers/dotnet/cs folder of the Sagant package (see Sagant.csproj), so a
+         consumer only ever needs `PackageReference Include="Sagant"` — no second package, no second
+         reference. -->
+    <IsPackable>false</IsPackable>
+    <Description>Roslyn source generator behind [WorkflowStep]/[WorkflowCommandHandler] — emits
+      zero-reflection IWorkflowStepDispatcher/IWorkflowCommandDispatcher implementations for
+      Sagant workflow classes. Not meant to be referenced directly; bundled into the Sagant
+      core package as an analyzer.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

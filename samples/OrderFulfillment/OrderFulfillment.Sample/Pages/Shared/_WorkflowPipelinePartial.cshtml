@@ -1,0 +1,69 @@
+@using OrderFulfillment.Sample
+@model OrderSnapshot
+@functions {
+    private static string FriendlyName(string stepName) => stepName switch
+    {
+        nameof(OrderFulfillmentWorkflow.ChargePaymentStep) => "Charge",
+        nameof(OrderFulfillmentWorkflow.FulfillItemsStep) => "Fulfill items",
+        nameof(OrderFulfillmentWorkflow.AfterItemsFulfilledStep) => "Check items",
+        nameof(OrderFulfillmentWorkflow.NotifyCustomerStep) => "Notify",
+        nameof(OrderFulfillmentWorkflow.RefundPaymentStep) => "Refund",
+        nameof(OrderFulfillmentWorkflow.AutoCancelStep) => "Auto-cancel",
+        nameof(ItemFulfillmentWorkflow.ReserveItemStep) => "Reserve",
+        nameof(ItemFulfillmentWorkflow.ArrangeShipmentStep) => "Ship",
+        nameof(ItemFulfillmentWorkflow.ReleaseItemStep) => "Release",
+        _ => stepName,
+    };
+
+    private static string StepClass(StepRun step) => step.Status switch
+    {
+        StepRunStatus.Succeeded => "step-ok",
+        StepRunStatus.Failed => "step-fail",
+        _ => "step-running",
+    };
+
+    private static string StepMeta(StepRun step) => step.Status switch
+    {
+        StepRunStatus.Running => $"running (attempt {step.Attempt})",
+        StepRunStatus.Succeeded => "done",
+        StepRunStatus.Failed => $"failed: {step.Error}",
+        _ => "",
+    };
+
+    // Children render inline, indented directly under the step that spawned them — currently only
+    // ever FulfillItemsStep (an order's own line-item children), recursing naturally if an item ever
+    // grows children of its own.
+    private static bool SpawnsChildren(string stepName) =>
+        stepName == nameof(OrderFulfillmentWorkflow.FulfillItemsStep);
+}
+<div class="step-pipeline">
+    @foreach (var step in Model.Steps)
+    {
+        <div class="step-node @StepClass(step)">
+            <div class="step-name">@FriendlyName(step.Name)</div>
+            <div class="step-meta">@StepMeta(step)</div>
+        </div>
+        if (SpawnsChildren(step.Name) && Model.Children.Count > 0)
+        {
+            <div class="child-group">
+                @foreach (var child in Model.Children)
+                {
+                    <div class="child-card">
+                        <div class="child-card-header">
+                            <span class="child-status-dot child-status-@child.State.ToString().ToLowerInvariant()"></span>
+                            @child.WorkflowId[(child.WorkflowId.LastIndexOf('#') + 1)..] — @child.StatusText
+                        </div>
+                        <partial name="_WorkflowPipelinePartial" model="child" />
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+<div class="log">
+    @foreach (var line in Model.Log)
+    {
+        <div class="log-line">@line</div>
+    }
+</div>

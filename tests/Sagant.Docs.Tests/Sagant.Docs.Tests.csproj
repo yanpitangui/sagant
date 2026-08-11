@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <!-- The integration guide wires a host, so its snippets name the hosting and exporter packages a
+         reader would install alongside Sagant. Referenced here so those blocks compile as written. -->
+    <PackageReference Include="Akka.Remote.Hosting" />
+    <PackageReference Include="Akka.Persistence.Hosting" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Sagant\Sagant.csproj" />
+    <ProjectReference Include="..\..\src\Sagant.Testing\Sagant.Testing.csproj" />
+    <ProjectReference Include="..\..\src\Sagant.Runtime.Akka\Sagant.Runtime.Akka.csproj" />
+    <!-- Referenced twice for the same reason Sagant.Tests does it: once as an assembly, because the
+         snippet compiler drives the generator through CSharpGeneratorDriver, and once as a real
+         analyzer so this project's own fixture workflows get generated Steps tables. -->
+    <ProjectReference Include="..\..\src\Sagant.SourceGenerators\Sagant.SourceGenerators.csproj" />
+    <ProjectReference Include="..\..\src\Sagant.SourceGenerators\Sagant.SourceGenerators.csproj"
+                       OutputItemType="Analyzer"
+                       ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- Every markdown file, so a new doc is covered the moment it lands. Each `csharp` fence declares
+       its own scaffold, and an untagged one fails the run, so nothing joins the docs unchecked. -->
+  <ItemGroup>
+    <None Include="..\..\README.md" Link="docs\README.md" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\docs\*.md" LinkBase="docs" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

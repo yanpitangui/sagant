@@ -1,0 +1,31 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Akka.Cluster" />
+    <PackageReference Include="Akka.Persistence.TestKit" />
+    <PackageReference Include="Akka.Persistence.Query.InMemory" />
+    <PackageReference Include="Akka.Remote.Hosting" />
+    <PackageReference Include="Akka.TestKit.Xunit2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Sagant\Sagant.csproj" />
+    <ProjectReference Include="..\..\src\Sagant.Runtime.Akka\Sagant.Runtime.Akka.csproj" />
+    <!-- Analyzer only, not the plain-assembly reference Sagant.Tests also needs — nothing here
+         drives the generator programmatically (that's Sagant.Tests's StepRegistryGeneratorTests);
+         this just needs [WorkflowStep]/[WorkflowCommandHandler] on EchoWorkflow.cs to actually get
+         processed, since a test project's generator output doesn't cross into a different project. -->
+    <ProjectReference Include="..\..\src\Sagant.SourceGenerators\Sagant.SourceGenerators.csproj"
+                       OutputItemType="Analyzer"
+                       ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

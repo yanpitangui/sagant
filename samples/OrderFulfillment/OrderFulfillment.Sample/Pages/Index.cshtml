@@ -1,0 +1,48 @@
+@page
+@model IndexModel
+@{
+    Layout = null;
+    ViewData["SelectedOrderId"] = Model.SelectedOrderId;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OrderFulfillment — live</title>
+    <link rel="stylesheet" href="~/app.css" />
+</head>
+<body>
+    <div class="app-shell">
+        <header class="app-header">OrderFulfillment — live</header>
+        <div class="layout">
+            <div class="rail">
+                <form id="place-order-form" method="post" asp-page-handler="Place">
+                    @Html.AntiForgeryToken()
+                    <div class="new-order-bar">
+                        <div id="item-rows" class="item-rows">
+                            <div class="item-row">
+                                <input class="amount-input" type="number" min="1" name="itemAmounts" value="500" title="item amount" />
+                                <button type="button" class="remove-item-button" title="remove item">×</button>
+                            </div>
+                        </div>
+                        <button type="button" id="add-item-button" class="add-item-button">+ add item</button>
+                        <select class="fault-step" name="faultStep">
+                            <option value="">no forced failure</option>
+                            <option value="ChargePaymentStep">fail: Charge</option>
+                        </select>
+                        <select class="fault-mode" name="faultMode">
+                            <option value="permanent">permanent</option>
+                            <option value="transient">transient</option>
+                        </select>
+                        <button class="place-button" type="submit">+ Place order</button>
+                    </div>
+                </form>
+                <partial name="_OrderListPartial" model="Model.Orders" view-data="ViewData" />
+            </div>
+            <partial name="_OrderDetailPartial" model="Model.SelectedOrder" />
+        </div>
+    </div>
+    <script src="~/app.js"></script>
+</body>
+</html>

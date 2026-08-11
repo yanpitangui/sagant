@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Basic.Reference.Assemblies.Net100" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Sagant\Sagant.csproj" />
+    <ProjectReference Include="..\..\src\Sagant.Testing\Sagant.Testing.csproj" />
+    <!-- Referenced twice, deliberately: once as a normal assembly (StepRegistryGeneratorTests
+         drives the generator programmatically via CSharpGeneratorDriver), and once as an actual
+         analyzer so [WorkflowStep] classes declared in THIS project (e.g. EchoWorkflow in
+         EchoWorkflowGeneratorSanityTests) get real generator output, not just the synthetic
+         in-memory compilations the generator's own unit tests build. -->
+    <ProjectReference Include="..\..\src\Sagant.SourceGenerators\Sagant.SourceGenerators.csproj" />
+    <ProjectReference Include="..\..\src\Sagant.SourceGenerators\Sagant.SourceGenerators.csproj"
+                       OutputItemType="Analyzer"
+                       ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

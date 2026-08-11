@@ -1,0 +1,29 @@
+<Project>
+  <PropertyGroup>
+    <Authors>Yan Pitangui</Authors>
+    <PackageProjectUrl>https://github.com/yanpitangui/sagant</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/yanpitangui/sagant</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Description>Durable, step-orchestrated workflow engine for .NET.</Description>
+    <PackageTags>workflow;saga;durable-execution;orchestration;dotnet</PackageTags>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
+    <None Include="$(MSBuildThisFileDirectory)\..\README.md" Pack="true" Visible="false" PackagePath="\" Condition="Exists('$(MSBuildThisFileDirectory)\..\README.md')" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+</Project>

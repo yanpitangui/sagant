@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Runtime-agnostic core of Sagant: durable, step-orchestrated workflow authoring
+      (Workflow&lt;TState&gt;, effects, settings) with zero dependency on any specific execution
+      engine. Pair with a runtime package (e.g. Sagant.Runtime.Akka) to actually run workflows, and
+      Sagant.Testing to unit test them.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sagant.SourceGenerators\Sagant.SourceGenerators.csproj"
+                       OutputItemType="Analyzer"
+                       ReferenceOutputAssembly="false"
+                       PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Embeds Sagant.SourceGenerators' own build output directly into THIS package under
+       analyzers/dotnet/cs, so a consumer only ever needs `PackageReference Include="Sagant"` — no
+       second package, no second reference. The ProjectReference above (ReferenceOutputAssembly=false)
+       is analyzer-only and deliberately does NOT get copied into Sagant's own bin/ output (verified:
+       it isn't there), so this can't be a plain `<None Include="$(OutputPath)\*.dll">` glob the way
+       a normal CopyLocal ProjectReference could be — it has to reach into the generator project's
+       own output directly. TargetsForTfmSpecificContentInPackage is the documented hook for adding
+       package content that isn't already one of Sagant's own build outputs. -->
+  <PropertyGroup>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_PackSourceGeneratorAnalyzer</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <Target Name="_PackSourceGeneratorAnalyzer" DependsOnTargets="ResolveReferences">
+    <ItemGroup>
+      <TfmSpecificPackageFile
+        Include="$(MSBuildThisFileDirectory)..\Sagant.SourceGenerators\bin\$(Configuration)\netstandard2.0\Sagant.SourceGenerators.dll"
+        PackagePath="analyzers/dotnet/cs/" />
+    </ItemGroup>
+  </Target>
+
+</Project>
