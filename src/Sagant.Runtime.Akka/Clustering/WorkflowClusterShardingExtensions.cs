@@ -31,6 +31,12 @@ public static class WorkflowClusterShardingExtensions
     /// sees — and may override — them: <c>HandOffStopMessage</c> is a <c>GracefulShutdown</c> so an
     /// in-flight step can finish across a rebalance, and <c>PassivateIdleEntityAfter</c> is disabled
     /// so an instance holding a deadline keeps the live timer that fires it.
+    ///
+    /// <para>Turning passivation on here is safe for work in progress: an entity running a step or
+    /// waiting out a retry backoff announces itself to its own shard at half the idle window, so it
+    /// stays resident for as long as the work takes (see <see cref="EntityKeepAlive"/>). What it
+    /// still costs is deadline lateness — a paused or long-running instance that passivates fires its
+    /// deadline whenever something next activates it (guarantee D8).</para>
     /// </param>
     /// <param name="producerBufferCapacity">
     /// Depth of the bounded local queue <c>WorkflowProducerAdapter</c> holds pending sends in before
@@ -92,12 +98,20 @@ public static class WorkflowClusterShardingExtensions
             //
             // The cost is memory: instances stay resident until they reach a terminal status. A
             // deployment with many long-lived workflows can trade that back via
-            // configureShardOptions, accepting the lateness. The fix that needs neither trade is a
-            // deadline sweeper that wakes only instances with a near-due deadline — see
-            // docs/deferred-work.md G4.
+            // configureShardOptions, accepting the lateness — work in progress survives it either way
+            // (see the keepAliveInterval below). The fix that needs neither trade is a durable timer
+            // waking an instance for its own deadline — see docs/deferred-work.md G4.
             PassivateIdleEntityAfter = TimeSpan.Zero,
         };
         configureShardOptions?.Invoke(shardOptions);
+
+        // Half the idle window, so an entity holding work is at most half a window away from its last
+        // announcement whenever the shard's own tick — which runs at that same cadence — looks. A
+        // deployment leaving passivation off has nothing to announce to, so the tick never runs.
+        // See EntityKeepAlive.
+        var keepAliveInterval = shardOptions.PassivateIdleEntityAfter is { Ticks: > 0 } idleWindow
+            ? TimeSpan.FromTicks(idleWindow.Ticks / 2)
+            : (TimeSpan?)null;
 
         // This WithShardRegion overload calls entityPropsFactory(system, registry, resolver)
         // synchronously, before starting the shard region (ClusterSharding.StartAsync) — ActorSystem
@@ -120,7 +134,7 @@ public static class WorkflowClusterShardingExtensions
                 return entityId => ShardingConsumerController.Create<WorkflowEnvelope>(
                     consumerController => Props.Create(() => new WorkflowEntityActor<TWorkflow, TState>(
                         typeName + "-" + entityId, workflowFactory, consumerController, timeoutScheduler, gracefulShutdownGrace, timeProvider,
-                        snapshotEveryNEvents, entityId)),
+                        snapshotEveryNEvents, entityId, keepAliveInterval)),
                     consumerSettings);
             },
             new WorkflowMessageExtractor(numberOfShards),

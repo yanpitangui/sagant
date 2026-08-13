@@ -86,6 +86,12 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
     private readonly TimeSpan _gracefulShutdownGrace;
     private bool _shuttingDown;
 
+    /// <summary>How often this entity announces itself to its own shard while it holds work, or
+    /// <c>null</c> where the deployment leaves idle passivation off and nothing has to be announced.
+    /// See <see cref="EntityKeepAlive"/>.</summary>
+    private readonly TimeSpan? _keepAliveInterval;
+    private ICancelable? _keepAliveTick;
+
     public WorkflowEntityActor(
         string persistenceId,
         Func<TWorkflow> workflowFactory,
@@ -101,7 +107,12 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         // actually understands. Defaults to persistenceId unchanged for a caller that constructs
         // this actor directly rather than through real ClusterSharding (bare-actor tests, mainly) —
         // there, the two are already the same value in practice.
-        string? entityId = null)
+        string? entityId = null,
+        // How often to announce this entity to its own shard region while it holds work, keeping the
+        // shard's idle clock fresh — see EntityKeepAlive. WithWorkflow derives it from the
+        // PassivateIdleEntityAfter the deployment configured, and leaves it null where passivation is
+        // off, which is the default.
+        TimeSpan? keepAliveInterval = null)
     {
         _persistenceId = persistenceId;
         _entityId = entityId ?? persistenceId;
@@ -147,6 +158,11 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
             ? requested
             : safeGraceCeiling;
 
+        _keepAliveInterval = keepAliveInterval is { } interval && interval > TimeSpan.Zero ? interval : null;
+
+        Command<KeepAliveTick>(_ => AnnounceIfHoldingWork());
+        // The round trip's whole purpose is the shard timestamp it touched on the way here.
+        Command<EntityKeepAlive>(_ => { });
         Command<GracefulShutdown>(_ => HandleGracefulShutdown());
         Command<GracefulShutdownGraceExpired>(_ =>
         {
@@ -253,7 +269,54 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
     {
         base.PreStart();
         _consumerController.Tell(new ConsumerController.Start<WorkflowEnvelope>(Self));
+        ScheduleKeepAliveTick();
     }
+
+    /// <summary>
+    /// Arms the next keep-alive tick. The tick runs for as long as the entity does, and decides
+    /// message by message whether there is anything to announce — see
+    /// <see cref="AnnounceIfHoldingWork"/>. Keeping the tick independent of when work starts and stops
+    /// leaves the eight places a step settles free of timer bookkeeping.
+    /// </summary>
+    private void ScheduleKeepAliveTick()
+    {
+        if (_keepAliveInterval is not { } interval)
+        {
+            return;
+        }
+
+        _keepAliveTick = _timeoutScheduler.ScheduleTimeout(interval, Self, new KeepAliveTick());
+    }
+
+    /// <summary>
+    /// Announces this entity to its own shard region while it holds work the shard cannot see: a step
+    /// running off-actor-thread, or a retry backoff waiting out its delay. Both live entirely on this
+    /// actor, so the shard sees an entity that has received nothing for as long as the work takes.
+    ///
+    /// An idle entity announces nothing and passivates, which is what the deployment turned
+    /// passivation on for.
+    /// </summary>
+    private void AnnounceIfHoldingWork()
+    {
+        ScheduleKeepAliveTick();
+
+        var holdingWork = _stepInFlight || _envelope.RetryDelayUntil is not null;
+        if (_shuttingDown || !holdingWork)
+        {
+            return;
+        }
+
+        // Addressed by entity id and sent to the region, so the shard routes it back down here and
+        // touches this entity's timestamp on the way through. That routing is the whole trip.
+        if (_workflowHandleRegistry.TryResolveByTypeName(_workflow.WorkflowTypeName, out var targets))
+        {
+            targets.ShardRegion.Tell(new WorkflowEnvelope(_entityId, EntityKeepAlive.Instance));
+        }
+    }
+
+    /// <summary>Local, and never leaves this actor: it prompts the announcement rather than being
+    /// the announcement, which is <see cref="EntityKeepAlive"/>.</summary>
+    private sealed record KeepAliveTick;
 
     private void HandleExternalCommand(object message)
     {
@@ -680,6 +743,7 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         }
 
         _inFlightQueries.Clear();
+        _keepAliveTick?.Cancel();
         base.PostStop();
     }
 

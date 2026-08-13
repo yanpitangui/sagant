@@ -54,6 +54,14 @@ sharding's idle passivation by default, overriding its 120-second default. The c
 stay resident until terminal; a deployment with many long-lived workflows can trade that back through
 `configureShardOptions`, accepting the lateness.
 
+**D8a — Work in progress keeps its instance resident.**
+Cluster sharding measures idleness by the messages it routes to an entity, and an instance running a
+step or waiting out a retry backoff receives none while it does so. Such an instance announces itself
+to its own shard at half the configured idle window, so it stays resident for as long as the work
+takes. A deployment that turns idle passivation on therefore trades deadline lateness alone: a step
+mid-flight is never stopped for looking idle, and an instance never stalls mid-chain waiting for
+something to activate it.
+
 **D9 — The persisted event schema is Sagant's own compatibility burden.**
 An instance's history is a sequence of engine-defined events, and every version of Sagant reads back
 what an earlier one wrote: fields are only ever added as optional, never renamed or retyped, and a
@@ -320,7 +328,8 @@ addressable only by an id you already hold.
 ## Known limits
 
 - **Timer lateness when passivation is re-enabled (D8).** Off by default, so this only bites a
-  deployment that turns it back on.
+  deployment that turns it back on — and it is all that turning it back on costs, since work in
+  progress holds its instance resident (D8a).
 - **A dropped step stalls its instances (E5).** They are held rather than ended, and each one needs
   the step deployed again plus a `Resume` before it moves. Nothing self-heals: the operator does both.
 - **Unbounded journal growth.** A workflow that loops indefinitely keeps appending events, and

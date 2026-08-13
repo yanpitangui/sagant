@@ -297,13 +297,14 @@ public abstract class WorkflowActorTestKit : TestKit
         TimeSpan? gracefulShutdownGrace = null,
         int snapshotEveryNEvents = 10,
         Dictionary<Type, Func<TestState, object, CancellationToken, Task<QueryEffect>>>? queries = null,
-        Func<ChildResultContext<TestState>, ChildResultEffect<TestState>>? childResult = null)
+        Func<ChildResultContext<TestState>, ChildResultEffect<TestState>>? childResult = null,
+        TimeSpan? keepAliveInterval = null)
     {
         return Sys.ActorOf(Props.Create(() =>
             new WorkflowEntityActor<ScriptableWorkflow, TestState>(
                 persistenceId, () => new ScriptableWorkflow(steps, commands, settings, ctSteps, workflowTypeName, queries, childResult),
                 consumerController ?? ActorRefs.Nobody, timeoutScheduler: null, gracefulShutdownGrace, timeProvider,
-                snapshotEveryNEvents)));
+                snapshotEveryNEvents, null, keepAliveInterval)));
     }
 
     protected IActorRef CreateActor(
@@ -314,7 +315,8 @@ public abstract class WorkflowActorTestKit : TestKit
         IActorRef? consumerController = null,
         string? workflowTypeName = null,
         TimeSpan? gracefulShutdownGrace = null,
-        int snapshotEveryNEvents = 10) =>
+        int snapshotEveryNEvents = 10,
+        TimeSpan? keepAliveInterval = null) =>
         CreateActor(
             persistenceId,
             new Dictionary<string, Func<TestState, object?, Task<StepEffect<TestState>>>>(script.Steps),
@@ -327,7 +329,8 @@ public abstract class WorkflowActorTestKit : TestKit
             gracefulShutdownGrace: gracefulShutdownGrace,
             snapshotEveryNEvents: snapshotEveryNEvents,
             queries: new Dictionary<Type, Func<TestState, object, CancellationToken, Task<QueryEffect>>>(script.Queries),
-            childResult: script.ChildResult);
+            childResult: script.ChildResult,
+            keepAliveInterval: keepAliveInterval);
 
     /// <summary>
     /// Creates an actor under the <see cref="AltScriptableWorkflow"/> identity instead of
