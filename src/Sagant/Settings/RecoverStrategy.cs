@@ -58,11 +58,11 @@ public readonly struct RecoverStrategyBuilder
     /// Reach for this where the cause is likely outside the workflow — a gateway that is down, a
     /// credential that expired — and the right response is to fix that and try again.
     ///
-    /// <para><b>Suited to a root workflow driven by <c>Send</c>.</b> A parked run has not ended, and
-    /// two things wait on a run ending. <c>RunAndAwaitResult</c> blocks until its own timeout and
-    /// throws, where an ending run hands back a <see cref="Protocol.WorkflowOutcome.Failed"/> result.
-    /// A parked <em>child</em> reports nothing to its parent, so the group awaiting it waits with
-    /// it. Where either applies, a strategy that fails or fails over keeps the caller informed.</para>
+    /// <para><b>A parked run is alive, and what waits on one has to allow for that.</b> A caller in
+    /// <c>RunAndAwaitResult</c> is released with a <see cref="Protocol.WorkflowResult{TState}.Parked"/>
+    /// carrying the failure, since waiting longer achieves nothing until someone acts on it. A parked
+    /// <em>child</em> reports nothing to its parent, so the group awaiting it waits with it — for a
+    /// child, a strategy that fails or fails over keeps the parent's group moving.</para>
     /// </summary>
     public RecoverStrategy ThenPark() => new(_maxRetries, null, null, ParkOnExhaustion: true);
 

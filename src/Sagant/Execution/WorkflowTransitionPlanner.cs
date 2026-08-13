@@ -235,6 +235,22 @@ public static class WorkflowTransitionPlanner
     }
 
     /// <summary>
+    /// What an instance standing on a step its deployed code no longer registers does: guarantee E5.
+    /// It is held at that step, keeping its state, the step name and that step's input, so deploying
+    /// the step again and calling <c>IWorkflowHandle.Resume</c> continues the run from where it stood.
+    ///
+    /// A driver reaches this when it goes to start a step and its dispatcher has no such name — the
+    /// shape of a deploy that removed a step while instances were persisted on it. Holding turns that
+    /// into a stall an operator can see and undo, and every affected run keeps everything a resume
+    /// needs.
+    /// </summary>
+    /// <param name="stepName">The step name the instance is persisted on.</param>
+    public static Transition PlanUnknownStep(string stepName) =>
+        new Transition.ParkTransition(new WorkflowFailure(
+            $"No step named '{stepName}' is registered on this workflow. Deploy the step and resume.",
+            StepName: stepName));
+
+    /// <summary>
     /// Whether a fired workflow-level timeout should be acted on, and what it means. Holds guarantee
     /// E3: the workflow timeout bounds active processing, so a timer arriving while the instance is
     /// paused is a stale no-op. Returns <c>null</c> when there is nothing to do.

@@ -101,9 +101,16 @@ by its own pause timeout instead.
 **E4 — Resume restarts the step fresh.**
 Retry count resets and any in-flight backoff is discarded.
 
-**E5 — An unknown step name ends the workflow.**
-An instance persisted on a step name that no longer exists in code ends with a reason rather than
-hanging. See [Known limits](#known-limits) — this makes step removal a deploy-safety concern.
+**E5 — An unknown step name holds the run.**
+An instance standing on a step name the running deployment has no code for is parked at that step, in
+`Suspended`, with `ParkedFailure` naming it. Its state, its step and that step's input all survive, so
+deploying the step again and calling `Resume` continues the run from where it stood (`E12`, `E4`).
+
+This is the one version skew the engine can see for itself, because it is the engine that looks the
+step up by name. A deploy that drops a step therefore stalls the instances sitting on it, and ends
+none of them. Whoever is watching learns two ways: a caller in `RunAndAwaitResult` is released with
+`WorkflowResult.Parked`, and the instances list as `Suspended` (`V6`). A parked child reports nothing
+to its parent's group, so a parent fanning out across a dropped step waits with it.
 
 **E6 — `Settings()` is read once per instance.**
 A driver resolves a workflow's settings when it constructs the instance and never re-reads them, so
@@ -162,8 +169,9 @@ in `Suspended`, with `ParkedFailure` saying what stopped it. The step and its in
 three conclusions — fail over to a step, park, or end the run — and a step with no strategy ends the
 run on its first failure.
 
-The run has not ended, so nothing that waits on an ending fires: `RunAndAwaitResult` waits, and a
-parked child reports nothing to its parent's group. Parking is chosen per step for that reason.
+A caller waiting on the run is released with `WorkflowResult.Parked` carrying that failure, since the
+run makes no further progress until someone acts on it. A parked child reports nothing to its
+parent's group, so the group waits with it — which is why parking is chosen per step.
 
 ## Children
 
@@ -313,8 +321,8 @@ addressable only by an id you already hold.
 
 - **Timer lateness when passivation is re-enabled (D8).** Off by default, so this only bites a
   deployment that turns it back on.
-- **Step removal is a deploy hazard (E5).** Deploying code without a step that in-flight instances
-  are persisted on ends those instances.
+- **A dropped step stalls its instances (E5).** They are held rather than ended, and each one needs
+  the step deployed again plus a `Resume` before it moves. Nothing self-heals: the operator does both.
 - **Unbounded journal growth.** A workflow that loops indefinitely keeps appending events, and
   nothing resets that history. Snapshots bound how much of it recovery has to replay; they do not
   bound how much of it accumulates.

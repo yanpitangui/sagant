@@ -47,9 +47,10 @@ public abstract record WorkflowResult<TState>
     }
 
     /// <summary>
-    /// The run is held at the step that exhausted its retry budget under
-    /// <see cref="Settings.RecoverStrategy.ParkOnExhaustion"/>, and stays there until
-    /// <c>IWorkflowHandle.Resume</c> retries it.
+    /// The run is held at its current step — by a spent retry budget under
+    /// <see cref="Settings.RecoverStrategy.ParkOnExhaustion"/>, or by that step being missing from
+    /// the running deployment (guarantee E5) — and stays there until <c>IWorkflowHandle.Resume</c>
+    /// retries it.
     ///
     /// The instance is still alive and still owns its id, so a caller seeing this reports the
     /// failure onward and leaves the run where it is; resuming it later picks up from that step.

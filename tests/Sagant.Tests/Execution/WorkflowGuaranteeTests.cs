@@ -209,6 +209,56 @@ public class WorkflowGuaranteeTests
         Assert.Contains(plan.AfterPersist, d => d is WorkflowDecision.CancelTimer { Kind: WorkflowTimerKind.Pause });
     }
 
+    // ── E5 ───────────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>An instance standing on a step the deployed code no longer registers is held at that
+    /// step. A deploy that drops a step stalls the runs sitting on it, and each one keeps its state,
+    /// its step and that step's input for whoever puts the step back.</summary>
+    [Fact]
+    public void E5_AnUnknownStepName_ParksTheRunAtThatStep()
+    {
+        var standing = Next(FreshEnvelope(), new Transition.StepTransition("Charge", 42));
+
+        var parked = Next(standing, WorkflowTransitionPlanner.PlanUnknownStep("Charge"));
+
+        Assert.Equal(WorkflowStatus.Suspended, parked.Status);
+        Assert.Equal("Charge", parked.CurrentStepName);
+        Assert.Equal(42, parked.CurrentStepInput);
+        Assert.Equal("Charge", parked.ParkedFailure!.StepName);
+        Assert.Null(parked.Outcome);
+    }
+
+    /// <summary>A caller waiting on the run is released, since the run makes no further progress
+    /// until someone deploys the step and resumes it.</summary>
+    [Fact]
+    public void E5_ParkingOnAnUnknownStep_ReleasesWhoeverIsWaitingOnTheRun()
+    {
+        var standing = Next(FreshEnvelope(), new Transition.StepTransition("Charge", null));
+
+        var plan = Plan(standing, WorkflowTransitionPlanner.PlanUnknownStep("Charge"));
+
+        Assert.Contains(plan.AfterPersist, d => d is WorkflowDecision.NotifyCompletionWatchers);
+    }
+
+    /// <summary>Deploying the missing step back and resuming continues the run from where it stood,
+    /// which is what makes a step removal recoverable.</summary>
+    [Fact]
+    public void E5_AParkedUnknownStep_ResumesAtTheSameStep()
+    {
+        var standing = Next(FreshEnvelope(), new Transition.StepTransition("Charge", 42));
+        var parked = Next(standing, WorkflowTransitionPlanner.PlanUnknownStep("Charge"));
+
+        var resume = Assert.IsType<ControlPlan<OrderState>.Apply>(
+            WorkflowTransitionPlanner.PlanResume(parked, Now, Settings(), TestCause));
+        var resumed = WorkflowEventFold.ApplyAll(parked, resume.Events);
+
+        Assert.Equal(WorkflowStatus.Running, resumed.Status);
+        Assert.Equal("Charge", resumed.CurrentStepName);
+        Assert.Equal(42, resumed.CurrentStepInput);
+        Assert.Null(resumed.ParkedFailure);
+        Assert.Contains(resume.AfterPersist, d => d is WorkflowDecision.StartStep);
+    }
+
     // ── G3 / park on exhausted retries ───────────────────────────────────────────────────────────
 
     /// <summary>A step that exhausts its budget under a parking strategy holds the instance instead

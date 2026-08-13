@@ -1531,9 +1531,12 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         var stepName = _envelope.CurrentStepName!;
         if (!_workflow.TryGetStep(stepName, out var descriptor))
         {
+            // Guarantee E5: this instance is persisted on a step this deployment has no code for, so
+            // it is held there with everything a resume needs — see
+            // WorkflowTransitionPlanner.PlanUnknownStep.
             PersistEnvelopeThen(
                 PersistenceEffect<TState>.NoPersistence.Instance,
-                new Transition.TerminalTransition(new WorkflowOutcome.Failed(new WorkflowFailure($"Unknown step '{stepName}'", StepName: stepName))),
+                WorkflowTransitionPlanner.PlanUnknownStep(stepName),
                 new TransitionCause.Control("UnknownStep"));
             return;
         }

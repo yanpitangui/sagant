@@ -53,9 +53,10 @@ public sealed record WorkflowRuntimeState<TState>(
     /// </summary>
     WorkflowOutcome? Outcome = null,
     /// <summary>
-    /// Why this instance is being held, when it was parked by a step exhausting its retry budget
-    /// under <see cref="Settings.RecoverStrategy.ParkOnExhaustion"/>. Readable while the run waits,
-    /// so whoever decides whether to resume can see what to fix first.
+    /// Why this instance is being held: a step exhausted its retry budget under
+    /// <see cref="Settings.RecoverStrategy.ParkOnExhaustion"/>, or it stands on a step the running
+    /// deployment has no code for (guarantee E5). Readable while the run waits, so whoever decides
+    /// whether to resume can see what to fix first.
     ///
     /// Distinct from <see cref="Outcome"/>, which says how a run <em>ended</em>: a parked run has
     /// not ended, and clears this the moment it resumes.

@@ -29,14 +29,14 @@ public abstract record Transition
     public sealed record DeleteTransition(string? Reason) : Transition;
 
     /// <summary>
-    /// Hold the instance where it stands, because a step exhausted its retry budget under a strategy
-    /// that parks. The run stays alive with its step and input intact, so
+    /// Hold the instance where it stands. The run stays alive with its step and input intact, so
     /// <c>IWorkflowHandle.Resume</c> re-runs that attempt with a fresh budget.
     ///
-    /// Reached only through <see cref="Settings.RecoverStrategy.ParkOnExhaustion"/>, never from a
-    /// handler: a handler that wants to wait has <c>ThenPause</c>, which is the workflow's own
-    /// decision to wait for something. This is the engine reporting that it ran out of ways to make
-    /// progress.
+    /// Two routes reach it, both of them the engine's own: a step exhausting its retry budget under
+    /// <see cref="Settings.RecoverStrategy.ParkOnExhaustion"/>, and an instance standing on a step
+    /// the running deployment has no code for (guarantee E5). A handler that wants to wait has
+    /// <c>ThenPause</c>, which is the workflow's own decision to wait for something; this case is the
+    /// engine reporting that it ran out of ways to make progress.
     /// </summary>
     public sealed record ParkTransition(WorkflowFailure Failure) : Transition;
 
