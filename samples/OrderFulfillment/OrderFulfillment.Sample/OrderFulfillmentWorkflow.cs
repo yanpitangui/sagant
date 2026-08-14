@@ -112,8 +112,12 @@ public partial class OrderFulfillmentWorkflow : Workflow<OrderState>
     public StepEffect<OrderState> FulfillItemsStep(StepContext<OrderState> ctx)
     {
         var updated = ctx.State with { Status = OrderStatus.Fulfilling };
+        // Scoped to this order, because an item id arrives on the command and a command is not
+        // unique: a schedule sends the same one every time it fires, so every occurrence would
+        // otherwise await the very same item entity — which the first occurrence already finished,
+        // leaving every later order waiting on a child that will never report to it.
         var children = ctx.State.Items.Select(item => StepEffects.Child<ItemFulfillmentWorkflow>(
-            item.ItemId,
+            ItemWorkflowId(ctx.WorkflowId, item.ItemId),
             new FulfillItem(ctx.State.CustomerId, item.Amount, ctx.State.ShippingAddress),
             // An order in a terminal state (ended, deleted, or externally terminated) has nothing
             // left for any still-running item to do — cascading Terminate keeps a deleted order from
@@ -126,6 +130,13 @@ public partial class OrderFulfillmentWorkflow : Workflow<OrderState>
         return StepEffects.UpdateState(updated).AwaitChildren(
             children, options => options.AllSuccessful().WaitForAll().ResumeAt(Steps.AfterItemsFulfilledStep));
     }
+
+    /// <summary>
+    /// An item's own entity id. Already-scoped ids (the UI writes <c>{orderId}#item-N</c>) are left
+    /// alone, so the read model rows placed before the command was sent still line up.
+    /// </summary>
+    public static string ItemWorkflowId(string orderId, string itemId) =>
+        itemId.StartsWith(orderId, StringComparison.Ordinal) ? itemId : $"{orderId}#{itemId}";
 
     [WorkflowStep]
     public StepEffect<OrderState> AfterItemsFulfilledStep(ChildGroupResult result, StepContext<OrderState> ctx) =>

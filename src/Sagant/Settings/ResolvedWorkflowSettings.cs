@@ -29,6 +29,8 @@ public sealed class ResolvedWorkflowSettings
         SeqNrDedupCapacity = settings.SeqNrDedupCapacity;
         PruneFinalizedChildren = settings.PruneFinalizedChildren;
         CancellationStepName = settings.CancellationStepName;
+        HoldTimeout = settings.HoldTimeout;
+        HoldTimeoutStepName = settings.HoldTimeoutStepName;
 
         _defaultStepTimeout = settings.DefaultStepTimeout;
         _defaultStepRecoverStrategy = settings.DefaultStepRecoverStrategy;
@@ -63,6 +65,12 @@ public sealed class ResolvedWorkflowSettings
 
     /// <summary>See <see cref="WorkflowSettings.CancellationStepName"/>.</summary>
     public string? CancellationStepName { get; }
+
+    /// <summary>See <see cref="WorkflowSettings.HoldTimeout"/>.</summary>
+    public TimeSpan? HoldTimeout { get; }
+
+    /// <summary>See <see cref="WorkflowSettings.HoldTimeoutStepName"/>.</summary>
+    public string? HoldTimeoutStepName { get; }
 
     public static ResolvedWorkflowSettings From(WorkflowSettings settings) => new(settings);
 

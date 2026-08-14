@@ -16,6 +16,8 @@ public sealed class ChildGroupOptions
     private RemainingChildrenPolicy _remainingChildrenPolicy = RemainingChildrenPolicy.Terminate;
     private string? _resumeStepName;
     private string? _groupId;
+    private TimeSpan? _timeout;
+    private string? _timeoutStepName;
 
     public ChildGroupOptions AllSuccessful() { _completionPolicy = CompletionPolicy.AllSuccessful; return this; }
     public ChildGroupOptions AllCompleted() { _completionPolicy = CompletionPolicy.AllCompleted; return this; }
@@ -38,13 +40,29 @@ public sealed class ChildGroupOptions
     /// human-meaningful name later. Omit it and the runtime driver generates a durable one.</summary>
     public ChildGroupOptions GroupId(string groupId) { _groupId = groupId; return this; }
 
-    internal (string? GroupId, CompletionPolicy CompletionPolicy, FailurePolicy FailurePolicy, RemainingChildrenPolicy RemainingChildrenPolicy, string ResumeStepName) Build()
+    /// <summary>
+    /// Optional — how long this group waits before <paramref name="timeoutStep"/> decides what to do
+    /// about children that never finished. Omit it and the parent waits for them however long they
+    /// take, which is the default.
+    ///
+    /// The step takes the group's result so far, so it sees which children settled and which are
+    /// still outstanding, and decides from there — compensate, carry on without them, or end the run.
+    /// </summary>
+    public ChildGroupOptions Timeout<TWorkflow>(TimeSpan timeout, StepRef<TWorkflow, ChildGroupResult> timeoutStep)
+    {
+        _timeout = timeout;
+        _timeoutStepName = timeoutStep.Name;
+        return this;
+    }
+
+    internal (string? GroupId, CompletionPolicy CompletionPolicy, FailurePolicy FailurePolicy, RemainingChildrenPolicy RemainingChildrenPolicy, string ResumeStepName, TimeSpan? Timeout, string? TimeoutStepName) Build()
     {
         if (_resumeStepName is null)
         {
             throw new InvalidOperationException($"{nameof(ResumeAt)} is required — call it before building the group.");
         }
 
-        return (_groupId, _completionPolicy, _failurePolicy, _remainingChildrenPolicy, _resumeStepName);
+        return (_groupId, _completionPolicy, _failurePolicy, _remainingChildrenPolicy, _resumeStepName,
+            _timeout, _timeoutStepName);
     }
 }

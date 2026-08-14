@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Sagant\Sagant.csproj" />
+    <ProjectReference Include="..\..\src\Sagant.Scheduling\Sagant.Scheduling.csproj" />
+    <ProjectReference Include="..\..\src\Sagant.Testing\Sagant.Testing.csproj" />
+  </ItemGroup>
+
+</Project>

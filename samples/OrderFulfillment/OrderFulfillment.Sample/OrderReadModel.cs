@@ -200,6 +200,83 @@ public sealed class OrderReadModelRepository(string connectionString)
             .MergeAsync();
     }
 
+    /// <summary>
+    /// Registers an order this replica did not place, so the rows every other write hangs off exist.
+    ///
+    /// <see cref="PlaceOrderAsync"/> covers an order placed through the UI, which is every order the
+    /// sample had until a schedule started placing them: a schedule sends its target a command
+    /// directly, so the first this read model hears of such an order is an event about it. Merge
+    /// expresses that as INSERT ... ON CONFLICT DO NOTHING, so an order that was placed normally is
+    /// left exactly as it is.
+    /// </summary>
+    public async Task EnsureOrderRegistered(string orderId, string customerId)
+    {
+        await using var db = Connect();
+
+        await db.GetTable<WorkflowViewRow>()
+            .Merge()
+            .Using(new[]
+            {
+                new WorkflowViewRow
+                {
+                    WorkflowId = orderId, ParentWorkflowId = null,
+                    WorkflowType = nameof(OrderFulfillmentWorkflow), Status = nameof(OrderStatus.Started),
+                },
+            })
+            .OnTargetKey()
+            .InsertWhenNotMatched()
+            .MergeAsync();
+
+        await db.GetTable<OrderRow>()
+            .Merge()
+            .Using(new[]
+            {
+                new OrderRow
+                {
+                    OrderId = orderId, CustomerId = customerId, Amount = 0, ShippingAddress = string.Empty,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                },
+            })
+            .OnTargetKey()
+            .InsertWhenNotMatched()
+            .MergeAsync();
+    }
+
+    /// <summary>
+    /// Registers an item this replica did not place, so the rows every other write hangs off exist.
+    /// The order it belongs to is the part of its id before the separator, which is how
+    /// <c>OrderFulfillmentWorkflow</c> scopes an item to its order.
+    ///
+    /// The amount is unknown here: an event says an item ran, not what it was for. It is what
+    /// <see cref="PlaceOrderAsync"/> records for an order placed through the UI, and zero for one a
+    /// schedule placed — which the UI shows as the item existing, with nothing claimed about its size.
+    /// </summary>
+    public async Task EnsureItemRegistered(string itemWorkflowId, string orderId)
+    {
+        await using var db = Connect();
+
+        await db.GetTable<WorkflowViewRow>()
+            .Merge()
+            .Using(new[]
+            {
+                new WorkflowViewRow
+                {
+                    WorkflowId = itemWorkflowId, ParentWorkflowId = orderId,
+                    WorkflowType = nameof(ItemFulfillmentWorkflow), Status = nameof(ItemStatus.Started),
+                },
+            })
+            .OnTargetKey()
+            .InsertWhenNotMatched()
+            .MergeAsync();
+
+        await db.GetTable<OrderItemRow>()
+            .Merge()
+            .Using(new[] { new OrderItemRow { OrderId = orderId, ItemWorkflowId = itemWorkflowId, Amount = 0 } })
+            .OnTargetKey()
+            .InsertWhenNotMatched()
+            .MergeAsync();
+    }
+
     public async Task RefreshStatus(string workflowId, string status, string? failureReason)
     {
         await using var db = Connect();

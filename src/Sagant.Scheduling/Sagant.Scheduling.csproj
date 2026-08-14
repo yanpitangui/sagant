@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Recurring and delayed workflow starts for Sagant. A schedule is itself a workflow,
+      so it inherits durability, retries, visibility and the deadline machinery rather than
+      reimplementing them — and it runs on any Sagant runtime, since it depends on the core package
+      alone.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sagant\Sagant.csproj" />
+    <!-- Analyzer classification is local to the project that declares it and does not flow through a
+         second ProjectReference hop, so this stays required for as long as this builds against
+         in-repo projects rather than the packed nupkg. See OrderFulfillment.Sample.csproj. -->
+    <ProjectReference Include="..\Sagant.SourceGenerators\Sagant.SourceGenerators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Cron parsing, including the local-time cases that are genuinely awkward: a spring-forward
+         boundary deletes an hour and a fall-back repeats one, and a schedule that mishandles either
+         silently skips or double-fires twice a year. -->
+    <PackageReference Include="Cronos" />
+  </ItemGroup>
+
+</Project>

@@ -1,3 +1,4 @@
+using Sagant.Execution;
 using Sagant.Protocol;
 using Sagant.Descriptors;
 using Akka.Actor;
@@ -150,6 +151,9 @@ internal sealed class WorkflowRef<TWorkflow, TState>
 
     public Task<WorkflowStatus> GetStatus(TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
         _shardRegion.Ask<WorkflowStatus>(new WorkflowEnvelope(EntityId, new GetStatus()), timeout, cancellationToken);
+
+    public Task<Done> Wake(WorkflowTimerKind kind, TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
+        _shardRegion.Ask<Done>(new WorkflowEnvelope(EntityId, new Wake(kind)), timeout, cancellationToken);
 
     /// <summary>
     /// Sends <paramref name="command"/>, then waits for the workflow to reach a terminal status

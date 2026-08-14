@@ -15,6 +15,7 @@ var builder = DistributedApplication.CreateBuilder(args);
 var postgresPassword = builder.AddParameter("postgres-password", "sagant-demo-postgres", secret: true);
 var postgres = builder.AddPostgres("postgres", password: postgresPassword)
     .WithDataVolume()
+    .WithArgs("-c", "max_connections=500")
     .WithInitFiles("./init-scripts");
 var ordersDb = postgres.AddDatabase("orders-db");
 

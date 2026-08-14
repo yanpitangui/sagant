@@ -133,7 +133,8 @@ public sealed class StepEffectsBuilder<TState>
         var built = options.Build();
 
         return Build(new Transition.AwaitChildrenTransition(
-            built.GroupId, list, built.CompletionPolicy, built.FailurePolicy, built.RemainingChildrenPolicy, built.ResumeStepName));
+            built.GroupId, list, built.CompletionPolicy, built.FailurePolicy, built.RemainingChildrenPolicy,
+            built.ResumeStepName, built.Timeout, built.TimeoutStepName));
     }
 
     /// <summary>

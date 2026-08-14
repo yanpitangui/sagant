@@ -78,7 +78,21 @@ public sealed record WorkflowSettings(
     /// immediately. It still reports <c>Cancelled</c>: what was asked for is worth recording even
     /// where there was no work to do about it.
     /// </summary>
-    string? CancellationStepName = null)
+    string? CancellationStepName = null,
+    /// <summary>
+    /// How long an instance stays held — by an operator's <c>Suspend</c>, or by a step that exhausted
+    /// its retries under a parking strategy — before <see cref="HoldTimeoutStepName"/> runs and the
+    /// workflow decides for itself.
+    ///
+    /// <c>null</c> by default, which waits for a person however long that takes. A deployment that
+    /// would rather a forgotten hold resolve itself sets this alongside
+    /// <see cref="HoldTimeoutStepName"/>. Both are needed: a deadline with nothing to run would
+    /// release an instance into no particular step.
+    /// </summary>
+    TimeSpan? HoldTimeout = null,
+    /// <summary>The step run when <see cref="HoldTimeout"/> passes, deciding what becomes of an
+    /// instance nobody came back for.</summary>
+    string? HoldTimeoutStepName = null)
 {
     /// <summary>Applied to a query with neither a per-query override nor a
     /// <see cref="DefaultQueryTimeout"/>. A query that genuinely needs longer sets its own.</summary>
@@ -105,6 +119,8 @@ public sealed class WorkflowSettingsBuilder
     private bool _pruneFinalizedChildren;
     private TimeSpan? _defaultQueryTimeout;
     private string? _cancellationStepName;
+    private TimeSpan? _holdTimeout;
+    private string? _holdTimeoutStepName;
 
     private readonly Dictionary<string, TimeSpan?> _stepTimeouts = new();
     private readonly Dictionary<string, RecoverStrategy?> _stepRecoverStrategies = new();
@@ -233,6 +249,18 @@ public sealed class WorkflowSettingsBuilder
     }
 
 
+    /// <summary>
+    /// How long an instance stays held — by an operator's <c>Suspend</c>, or by a step that parked —
+    /// before <paramref name="timeoutStep"/> runs and the workflow decides for itself. Both together:
+    /// a deadline with nothing to run would release an instance into no particular step.
+    /// </summary>
+    public WorkflowSettingsBuilder HoldTimeout<TWorkflow>(TimeSpan timeout, StepRef<TWorkflow, NoInput> timeoutStep)
+    {
+        _holdTimeout = timeout;
+        _holdTimeoutStepName = timeoutStep.Name;
+        return this;
+    }
+
     public WorkflowSettings Build()
     {
         var stepSettings = _stepOrder
@@ -257,7 +285,9 @@ public sealed class WorkflowSettingsBuilder
             _pruneFinalizedChildren,
             _defaultQueryTimeout,
             querySettings,
-            _cancellationStepName);
+            _cancellationStepName,
+            _holdTimeout,
+            _holdTimeoutStepName);
     }
 
     private void TrackStep(string stepName)

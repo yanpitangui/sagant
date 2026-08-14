@@ -63,6 +63,11 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
     /// them without scanning every persistence id the journal holds. Fixed per instance.</summary>
     private readonly IImmutableSet<string> _eventTags;
 
+    /// <summary><see cref="_eventTags"/> plus this instance's deadline-shard tag, carried by the
+    /// events that move a deadline. Both sets are built once, so choosing between them per event
+    /// costs a type test. See <see cref="WorkflowEventTags.MovesADeadline"/>.</summary>
+    private readonly IImmutableSet<string> _deadlineEventTags;
+
     /// <summary>Set while a restart's snapshot is in flight, so the snapshot that lands releases the
     /// history before it (see <see cref="WorkflowDecision.ReclaimHistory"/>).</summary>
     private bool _reclaimingHistory;
@@ -90,6 +95,10 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
     /// <c>null</c> where the deployment leaves idle passivation off and nothing has to be announced.
     /// See <see cref="EntityKeepAlive"/>.</summary>
     private readonly TimeSpan? _keepAliveInterval;
+
+    /// <summary>Set once <see cref="WarnIfDeadlineOutlastsResidency"/> has considered this instance,
+    /// so a long-lived one holding several deadlines says it at most once.</summary>
+    private bool _deadlineResidencyWarned;
     private ICancelable? _keepAliveTick;
 
     public WorkflowEntityActor(
@@ -118,6 +127,7 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         _entityId = entityId ?? persistenceId;
         _workflow = workflowFactory();
         _eventTags = WorkflowEventTags.For(_workflow.WorkflowTypeName);
+        _deadlineEventTags = WorkflowEventTags.ForDeadlineEvent(_workflow.WorkflowTypeName);
         _consumerController = consumerController;
         _timeoutScheduler = timeoutScheduler ?? new NativeWorkflowTimeoutScheduler(Context.System.Scheduler);
         _snapshotPolicy = new SnapshotPolicy(snapshotEveryNEvents);
@@ -178,6 +188,8 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         Command<RetryDue>(HandleRetryDue);
         Command<WorkflowTimedOut>(_ => HandleWorkflowTimedOut());
         Command<PauseTimedOut>(_ => HandlePauseTimedOut());
+        Command<HoldTimedOut>(_ => HandleHoldTimedOut());
+        Command<ChildGroupTimedOut>(msg => HandleChildGroupTimedOut(msg.GroupId));
         Command<SaveSnapshotSuccess>(HandleSnapshotSuccess);
         Command<SaveSnapshotFailure>(_ => { });
         // Shared with the confirmed-purge path (see PurgeThenStop): with a purge pending, any
@@ -221,6 +233,10 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         });
         Command<GetDiagnostics<TState>>(_ => Sender.Tell(new Diagnostics<TState>(_envelope)));
         Command<GetStatus>(_ => Sender.Tell(_envelope.Status));
+        // Reaching this handler means recovery already ran and OnRecoveryCompleted already re-armed
+        // every deadline this instance holds, firing any that had elapsed. So the reply is all that
+        // is left to do, and it carries the information the sender wants: this instance is up.
+        Command<Wake>(_ => Sender.Tell(Done.Instance));
         // The one query the framework ships (see GetState's own doc comment). Handled here rather
         // than through the author's own query table, since it is generic across every workflow and
         // needs no per-workflow handler. UserState is boxed the same way any reply already is.
@@ -351,7 +367,7 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         // and the persistence-id tag.
         Activity? activity = null;
         var effect = descriptor.Invoke(
-            _workflow, _envelope.UserState, message,
+            _workflow, _envelope.UserState, message, _entityId,
             _tracing.ResolveParentContext(),
             configureActivity: a =>
             {
@@ -523,7 +539,7 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         // HandleExternalCommand; this just supplies what only the runtime knows.
         Activity? activity = null;
         var effect = descriptor.Invoke(
-            _workflow, _envelope.UserState, envelope.Message,
+            _workflow, _envelope.UserState, envelope.Message, _entityId,
             _tracing.ResolveParentContext(),
             _tracing.ConsumeParentLink(_envelope.LastTraceParent, envelope.ParentRelationship),
             a =>
@@ -664,7 +680,7 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         // alone — letting a read become the next step's parent would misattribute that step to
         // whoever happened to poll for status just before it started.
         descriptor.Invoke(
-            _workflow, _envelope.UserState, query, cts.Token,
+            _workflow, _envelope.UserState, query, cts.Token, _entityId,
             _tracing.ResolveParentContext(),
             links: null,
             configureActivity: a =>
@@ -744,6 +760,12 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
 
         _inFlightQueries.Clear();
         _keepAliveTick?.Cancel();
+
+        // Passivation stops an entity that may still hold armed deadlines. Each is a persisted
+        // absolute instant the next activation arms again, so dropping them here costs nothing and
+        // keeps them from firing at an actor that has gone.
+        _timeouts.CancelAll();
+
         base.PostStop();
     }
 
@@ -875,6 +897,34 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         }
     }
 
+    /// <summary>
+    /// Nobody came back for a held instance, so it runs the step its hold named and that step decides
+    /// what becomes of it. A hold already released by any other route leaves nothing to plan, so a
+    /// timer that fires just after a resume does nothing.
+    /// </summary>
+    private void HandleHoldTimedOut()
+    {
+        if (WorkflowTransitionPlanner.PlanHoldTimeout(_envelope) is { } transition)
+        {
+            PersistEnvelopeThen(
+                PersistenceEffect<TState>.NoPersistence.Instance, transition, new TransitionCause.Control("HoldTimedOut"));
+        }
+    }
+
+    /// <summary>
+    /// A group's children never finished in the time it was given, so the parent runs the step that
+    /// group named and decides there. A group that has since resolved leaves nothing to plan.
+    /// </summary>
+    private void HandleChildGroupTimedOut(string groupId)
+    {
+        if (WorkflowTransitionPlanner.PlanChildGroupTimeout(_envelope, groupId) is { } transition)
+        {
+            PersistEnvelopeThen(
+                PersistenceEffect<TState>.NoPersistence.Instance, transition,
+                new TransitionCause.Control("ChildGroupTimedOut"));
+        }
+    }
+
     private void HandleSuspend(Suspend msg)
     {
         // Invalidate any in-flight step attempt — its eventual result (if any) is discarded via
@@ -882,7 +932,8 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         // by the plan so Resume knows what to re-execute. Cancelling here gives a cooperative step a
         // chance to actually stop, beyond simply discarding its eventual result.
         ApplyControlPlan(
-            WorkflowTransitionPlanner.PlanSuspend(_envelope, new TransitionCause.Control("Suspend")),
+            WorkflowTransitionPlanner.PlanSuspend(
+                _envelope, new TransitionCause.Control("Suspend"), _timeProvider.GetUtcNow(), _settings),
             beforePersist: () =>
         {
             _stepEpoch++;
@@ -1258,7 +1309,11 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         // plugin an application configures, and lets the per-type tag exist at all — an adapter is
         // registered per journal, where several workflow types share one and none of them is
         // identifiable from an event alone.
-        PersistAll(events.Select(e => new Tagged(e, _eventTags)), persisted =>
+        // An event that moves a deadline carries one extra tag, which is what lets a reader follow
+        // deadline changes across every instance while reading a small fraction of the journal.
+        PersistAll(
+            events.Select(e => new Tagged(e, WorkflowEventTags.MovesADeadline(e) ? _deadlineEventTags : _eventTags)),
+            persisted =>
         {
             var @event = (WorkflowEvent)persisted.Payload;
             _envelope = WorkflowEventFold.Apply(_envelope, @event);
@@ -1293,16 +1348,32 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
                     WorkflowDiagnostics.RecordOutcome(_workflow.WorkflowTypeName, ro.Outcome);
                     break;
                 case WorkflowDecision.ArmTimer { Kind: WorkflowTimerKind.Workflow } arm:
+                    WarnIfDeadlineOutlastsResidency(arm.Deadline);
                     ArmWorkflowTimeout(arm.Deadline);
                     break;
                 case WorkflowDecision.ArmTimer { Kind: WorkflowTimerKind.Pause } arm:
+                    WarnIfDeadlineOutlastsResidency(arm.Deadline);
                     ArmPauseTimeout(arm.Deadline);
+                    break;
+                case WorkflowDecision.ArmTimer { Kind: WorkflowTimerKind.Hold } arm:
+                    WarnIfDeadlineOutlastsResidency(arm.Deadline);
+                    ArmHoldTimeout(arm.Deadline);
+                    break;
+                case WorkflowDecision.ArmTimer { Kind: WorkflowTimerKind.ChildGroup, Discriminator: { } groupId } arm:
+                    WarnIfDeadlineOutlastsResidency(arm.Deadline);
+                    ArmChildGroupTimeout(groupId, arm.Deadline);
                     break;
                 case WorkflowDecision.CancelTimer { Kind: WorkflowTimerKind.Workflow }:
                     _timeouts.CancelWorkflow();
                     break;
                 case WorkflowDecision.CancelTimer { Kind: WorkflowTimerKind.Pause }:
                     _timeouts.CancelPause();
+                    break;
+                case WorkflowDecision.CancelTimer { Kind: WorkflowTimerKind.Hold }:
+                    _timeouts.CancelHold();
+                    break;
+                case WorkflowDecision.CancelTimer { Kind: WorkflowTimerKind.ChildGroup, Discriminator: { } groupId }:
+                    _timeouts.CancelChildGroup(groupId);
                     break;
                 case WorkflowDecision.StartChild startChild:
                     // A false return means this parent must end (unregistered child type) — stop
@@ -1501,6 +1572,9 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
             stragglers.Select(c => c.RelationshipId).ToList(),
             _settings.PruneFinalizedChildren);
 
+        // The group has resolved, so its own wait is over whatever it was counting down to.
+        _timeouts.CancelChildGroup(member.GroupId);
+
         var result = new ChildGroupResult(outcome.Value, groupMembers);
         _tracing.SetPendingResumeLinks(StepTracingContext.BuildResultLinks(groupMembers));
 
@@ -1625,7 +1699,7 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         // finally block for a step that never honors cancellation. Each retry attempt gets its own
         // distinct span, so a flaky step's history is visible as separate spans in a trace waterfall.
         var task = descriptor.Invoke(
-            _workflow, _envelope.UserState, input, attempt, _currentStepCts.Token,
+            _workflow, _envelope.UserState, input, attempt, _currentStepCts.Token, _entityId,
             _tracing.ResolveParentContext(),
             StepTracingContext.CombineLinks(_tracing.ConsumeRecoveredLink(), _tracing.ConsumeResumeLinks()),
             a =>
@@ -1657,6 +1731,51 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
             failure: ex => new StepFailed(stepName, epoch, ex));
     }
 
+    /// <summary>
+    /// Says so, once per instance, when this instance is about to wait longer than it will stay
+    /// resident and nothing is watching its deadline for it.
+    ///
+    /// Both conditions have to hold for lateness to be possible, which is why the check sits here
+    /// rather than at registration: an instance that passivates fires its deadline whenever something
+    /// next activates it (guarantee <c>D8</c>), and a deadline scheduler is what bounds that
+    /// (<c>D8b</c>). A deployment whose deadlines all land inside the passivation window needs
+    /// neither, and hears nothing.
+    ///
+    /// Checking at the moment of arming also sidesteps the order the host's builder calls happen in,
+    /// since by now every one of them has run.
+    /// </summary>
+    private void WarnIfDeadlineOutlastsResidency(DateTimeOffset deadline)
+    {
+        // A null interval means passivation is off, so this instance stays resident and holds its own
+        // timer for as long as it takes.
+        if (_deadlineResidencyWarned || _keepAliveInterval is not { } interval)
+        {
+            return;
+        }
+
+        // WithWorkflow derives the keep-alive interval as half the passivation window, so the window
+        // is twice it.
+        var residency = interval + interval;
+        if (deadline - _timeProvider.GetUtcNow() <= residency)
+        {
+            return;
+        }
+
+        _deadlineResidencyWarned = true;
+        if (Deadlines.WorkflowDeadlineSchedulerProvider.Instance.Apply(Context.System).IsConfigured)
+        {
+            return;
+        }
+
+        Context.GetLogger().Warning(
+            "Workflow {0}/{1} is waiting until {2}, past the {3} it stays resident for, and this "
+            + "ActorSystem runs no deadline scheduler. The deadline will fire whenever something next "
+            + "activates the instance. Call WithWorkflowDeadlines(readJournalPluginId) to have it woken "
+            + "on time, or set PassivateIdleEntityAfter to TimeSpan.Zero via configureShardOptions to "
+            + "hold instances resident.",
+            _workflow.WorkflowTypeName, _entityId, deadline, residency);
+    }
+
     private void ArmWorkflowTimeout(DateTimeOffset deadline)
     {
         _timeouts.CancelWorkflow();
@@ -1668,6 +1787,18 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         _timeouts.CancelPause();
         _timeouts.Pause = _timeoutScheduler.ScheduleTimeout(deadline - _timeProvider.GetUtcNow(), Self, new PauseTimedOut());
     }
+
+    private void ArmHoldTimeout(DateTimeOffset deadline)
+    {
+        _timeouts.CancelHold();
+        _timeouts.Hold = _timeoutScheduler.ScheduleTimeout(deadline - _timeProvider.GetUtcNow(), Self, new HoldTimedOut());
+    }
+
+    private void ArmChildGroupTimeout(string groupId, DateTimeOffset deadline) =>
+        _timeouts.SetChildGroup(
+            groupId,
+            _timeoutScheduler.ScheduleTimeout(
+                deadline - _timeProvider.GetUtcNow(), Self, new ChildGroupTimedOut(groupId)));
 
     private void HandleSnapshotSuccess(SaveSnapshotSuccess msg)
     {
@@ -1734,6 +1865,20 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         {
             ArmPauseTimeout(pauseDeadline);
         }
+        else if (_envelope.Status == WorkflowStatus.Suspended && _envelope.HoldDeadline is { } holdDeadline)
+        {
+            ArmHoldTimeout(holdDeadline);
+        }
+
+        // Every group still waiting gets its own timer back, from the instant it recorded when it
+        // opened — so a group's wait resumes at its remaining length like every other deadline.
+        foreach (var group in _envelope.ChildGroups?.Values ?? Enumerable.Empty<ChildGroupState>())
+        {
+            if (group is { Finalized: false, Deadline: { } groupDeadline })
+            {
+                ArmChildGroupTimeout(group.GroupId, groupDeadline);
+            }
+        }
 
         // A relationship is persisted before its first child-start/terminate Tell. If this actor
         // died in that gap, no delivery layer could have buffered a message it never received;
@@ -1770,6 +1915,10 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
     private sealed record WorkflowTimedOut;
 
     private sealed record PauseTimedOut;
+
+    private sealed record HoldTimedOut;
+
+    private sealed record ChildGroupTimedOut(string GroupId);
 
     private sealed record GracefulShutdownGraceExpired;
 

@@ -116,7 +116,9 @@ public static class WorkflowTransitionPlanner
                 break;
 
             case Transition.ParkTransition park:
-                events.Add(new WorkflowEvent.RunParked(park.Failure, lastTraceParent, cause));
+                events.Add(new WorkflowEvent.RunParked(
+                    park.Failure, lastTraceParent, cause,
+                    HoldDeadlineFor(settings, now), settings.HoldTimeoutStepName));
                 break;
 
             case Transition.RestartTransition rt:
@@ -133,7 +135,13 @@ public static class WorkflowTransitionPlanner
                     BuildRelationships(awaitChildren, groupId!, identity, lastTraceParent).ToList(),
                     new ChildGroupState(
                         groupId!, Generation: 0, awaitChildren.CompletionPolicy, awaitChildren.FailurePolicy,
-                        awaitChildren.RemainingChildrenPolicy, awaitChildren.ResumeStepName, Finalized: false),
+                        awaitChildren.RemainingChildrenPolicy, awaitChildren.ResumeStepName, Finalized: false,
+                        // Both together or neither: a deadline with no step to run would leave the
+                        // parent nowhere to go when it lands.
+                        awaitChildren is { Timeout: { } groupTimeout, TimeoutStepName: not null }
+                            ? now + groupTimeout
+                            : null,
+                        awaitChildren.TimeoutStepName),
                     awaitChildren.GroupId is null ? envelope.ChildGroupSequence + 1 : envelope.ChildGroupSequence,
                     lastTraceParent,
                     cause));
@@ -287,16 +295,31 @@ public static class WorkflowTransitionPlanner
     /// The current step name and input stay on the envelope, since <see cref="PlanResume{TState}"/>
     /// needs them to know what to re-execute.
     /// </summary>
-    public static ControlPlan<TState> PlanSuspend<TState>(WorkflowRuntimeState<TState> envelope, TransitionCause cause)
+    public static ControlPlan<TState> PlanSuspend<TState>(
+        WorkflowRuntimeState<TState> envelope,
+        TransitionCause cause,
+        DateTimeOffset now,
+        ResolvedWorkflowSettings settings)
     {
         if (envelope.Status != WorkflowStatus.Running)
         {
             return new ControlPlan<TState>.Reject($"Cannot suspend from status {envelope.Status}.");
         }
 
+        var holdDeadline = HoldDeadlineFor(settings, now);
+        var decisions = new List<WorkflowDecision>
+        {
+            new WorkflowDecision.RecordStatusChange(WorkflowStatus.Suspended),
+        };
+
+        if (holdDeadline is { } deadline)
+        {
+            decisions.Add(new WorkflowDecision.ArmTimer(WorkflowTimerKind.Hold, deadline));
+        }
+
         return new ControlPlan<TState>.Apply(
-            new WorkflowEvent[] { new WorkflowEvent.RunSuspended(cause) },
-            new WorkflowDecision[] { new WorkflowDecision.RecordStatusChange(WorkflowStatus.Suspended) });
+            new WorkflowEvent[] { new WorkflowEvent.RunSuspended(cause, holdDeadline, settings.HoldTimeoutStepName) },
+            decisions);
     }
 
     /// <summary>
@@ -409,6 +432,28 @@ public static class WorkflowTransitionPlanner
             ? new Transition.StepTransition(stepName, null)
             : null;
 
+    /// <summary>
+    /// What a held instance does when nobody came back for it: run the step its hold named, which
+    /// decides whether it resumes, fails or ends. <c>null</c> once the instance has left
+    /// <see cref="WorkflowStatus.Suspended"/> by any other route, so a timer that fires just after a
+    /// resume finds nothing to do.
+    /// </summary>
+    /// <summary>
+    /// What a parent does about a group whose children never finished: run the step the group named.
+    /// <c>null</c> once that group has resolved, so a timer firing just after the last child reports
+    /// does nothing.
+    /// </summary>
+    public static Transition? PlanChildGroupTimeout<TState>(
+        WorkflowRuntimeState<TState> envelope, string groupId) =>
+        envelope.ChildGroups?.GetValueOrDefault(groupId) is { Finalized: false, TimeoutStepName: { } stepName }
+            ? new Transition.StepTransition(stepName, null)
+            : null;
+
+    public static Transition? PlanHoldTimeout<TState>(WorkflowRuntimeState<TState> envelope) =>
+        envelope.Status == WorkflowStatus.Suspended && envelope.HoldTimeoutStepName is { } stepName
+            ? new Transition.StepTransition(stepName, null)
+            : null;
+
     private static IReadOnlyList<WorkflowDecision> BuildDecisions<TState>(
         WorkflowRuntimeState<TState> previous,
         WorkflowRuntimeState<TState> next,
@@ -498,6 +543,22 @@ public static class WorkflowTransitionPlanner
             ? new WorkflowDecision.ArmTimer(WorkflowTimerKind.Pause, pauseDeadline)
             : new WorkflowDecision.CancelTimer(WorkflowTimerKind.Pause));
 
+        // A group's own wait starts when the group opens. Keyed by the group, so a parent awaiting
+        // two of them keeps a deadline for each.
+        if (transition is Transition.AwaitChildrenTransition
+            && groupId is not null
+            && next.ChildGroups?.GetValueOrDefault(groupId) is { Deadline: { } groupDeadline })
+        {
+            decisions.Add(new WorkflowDecision.ArmTimer(WorkflowTimerKind.ChildGroup, groupDeadline, groupId));
+        }
+
+        // A hold runs while the instance is Suspended, by the same rule the pause timer follows: the
+        // status is what decides, so leaving that status ends the wait whatever instant the envelope
+        // still carries.
+        decisions.Add(next.Status == WorkflowStatus.Suspended && next.HoldDeadline is { } holdDeadline
+            ? new WorkflowDecision.ArmTimer(WorkflowTimerKind.Hold, holdDeadline)
+            : new WorkflowDecision.CancelTimer(WorkflowTimerKind.Hold));
+
         // A parked run releases its watchers too. It has not ended, but nothing it does next will
         // happen without someone acting on the failure first, so a caller waiting on it has nothing
         // left to wait for — see WorkflowResult{TState}.Parked.
@@ -509,6 +570,14 @@ public static class WorkflowTransitionPlanner
 
         return decisions;
     }
+
+    /// <summary>
+    /// When a hold established now stops waiting, as an absolute instant. <c>null</c> unless the
+    /// settings name both a length and a step to run — a deadline with nowhere to go would release
+    /// an instance into no particular step, so both are required together.
+    /// </summary>
+    private static DateTimeOffset? HoldDeadlineFor(ResolvedWorkflowSettings settings, DateTimeOffset now) =>
+        settings is { HoldTimeout: { } timeout, HoldTimeoutStepName: not null } ? now + timeout : null;
 
     private static void AddParentNotification<TState>(
         List<WorkflowDecision> decisions, WorkflowRuntimeState<TState> next)

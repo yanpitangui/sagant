@@ -119,7 +119,14 @@ public abstract record WorkflowEvent
 
     /// <summary>An operator held the instance. The current step name and input stay put, so a later
     /// resume knows what to re-execute.</summary>
-    public sealed record RunSuspended(TransitionCause Cause) : CausedEvent(Cause);
+    /// <param name="HoldDeadline">The absolute instant this hold stops waiting, computed at write
+    /// time. <c>null</c> for a hold released by a command alone.</param>
+    /// <param name="HoldTimeoutStepName">The step run when <paramref name="HoldDeadline"/> passes.
+    /// </param>
+    public sealed record RunSuspended(
+        TransitionCause Cause,
+        DateTimeOffset? HoldDeadline = null,
+        string? HoldTimeoutStepName = null) : CausedEvent(Cause);
 
     /// <summary>
     /// A step exhausted its retry budget under a parking strategy, so the instance is held at that
@@ -127,7 +134,16 @@ public abstract record WorkflowEvent
     /// <c>Suspended</c> status an operator hold reaches, and resumes the same way — the difference is
     /// that this one carries a reason a reader can act on.
     /// </summary>
-    public sealed record RunParked(WorkflowFailure Failure, string? TraceParent, TransitionCause Cause) : CausedEvent(Cause);
+    /// <param name="HoldDeadline">The absolute instant this park stops waiting, computed at write
+    /// time. <c>null</c> for a park that waits for an operator however long that takes.</param>
+    /// <param name="HoldTimeoutStepName">The step run when <paramref name="HoldDeadline"/> passes.
+    /// </param>
+    public sealed record RunParked(
+        WorkflowFailure Failure,
+        string? TraceParent,
+        TransitionCause Cause,
+        DateTimeOffset? HoldDeadline = null,
+        string? HoldTimeoutStepName = null) : CausedEvent(Cause);
 
     /// <summary>A held instance went back to work, restarting its step from the beginning
     /// (guarantee E4).</summary>

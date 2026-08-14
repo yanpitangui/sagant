@@ -13,6 +13,20 @@ A multi-step saga built on Sagant, driven through `IWorkflowClient` into a real
   under the order via `AwaitChildren`/`ParentClosePolicy`. One item failing fails the whole
   order (refund, cascade-close the rest) — see `OrderFulfillmentWorkflow.FulfillItemsStep`'s
   own doc comments for exactly how the parent reads success/failure back out of the group.
+- **Durable deadlines against passivation**: entities passivate after 10 seconds idle, while an
+  order awaiting approval waits 20 for its auto-cancel. So the order releases its memory
+  halfway through that wait, and `WithWorkflowDeadlines(SqlReadJournal.Identifier)` is what
+  brings it back on time — a deadline firing for an instance that is no longer in memory.
+  Place an order over the approval threshold, leave it alone, and watch it auto-cancel at 20
+  seconds despite nothing having touched it since.
+- **A schedule that is itself a workflow** (`Sagant.Scheduling`): a standing order placed every
+  fifteen seconds. Between occurrences it holds a pause with a deadline past the ten-second
+  passivation window, so it releases its memory and the deadline scheduler brings it back — the
+  same mechanism the approval auto-cancel above uses, applied to something that recurs forever.
+  Each occurrence's entity id comes from the instant it was scheduled for, so a fire that happens
+  twice lands on the same order rather than placing two. Its overlap policy is `Skip`, so an
+  occurrence arriving while the previous order is still running is counted as skipped rather than
+  run alongside it — visible in the schedule's own status.
 - A real 3-node Akka.NET cluster, not a single self-joining process. Each replica is a
   full, symmetric node: UI and `ClusterSharding` worker together, for both workflow types.
   An order's (or an item's) entity can be hosted on any of the 3, and `ClusterSharding`

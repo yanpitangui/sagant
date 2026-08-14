@@ -53,6 +53,7 @@ public readonly struct QueryDescriptor<TState>
         TState state,
         object query,
         CancellationToken cancellationToken,
+        string workflowId = "",
         ActivityContext parentContext = default,
         IEnumerable<ActivityLink>? links = null,
         Action<Activity>? configureActivity = null)
@@ -67,7 +68,7 @@ public readonly struct QueryDescriptor<TState>
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            var result = await _invoke(workflow, new QueryContext<TState>(state, cancellationToken), query).ConfigureAwait(false);
+            var result = await _invoke(workflow, new QueryContext<TState>(state, cancellationToken, workflowId), query).ConfigureAwait(false);
             activity?.SetStatus(ActivityStatusCode.Ok);
             WorkflowDiagnostics.RecordQueryDuration(workflow.WorkflowTypeName, QueryTypeName, stopwatch.Elapsed, "ok");
             return result;

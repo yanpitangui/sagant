@@ -3,12 +3,15 @@ using Akka.Actor;
 namespace Sagant.Runtime.Akka;
 
 /// <summary>
-/// Schedules a durable-enough timeout: the default implementation uses Akka.NET's ordinary
-/// scheduler (armed fresh on every actor activation from a persisted absolute deadline — see
-/// <see cref="WorkflowRuntimeState{TState}"/> — so a timer surviving passivation isn't needed, just
-/// recomputed). Pluggable so a future implementation can back onto
-/// <c>Aaronontheweb/akka-reminders</c> for timers that must fire even while the entity is fully
-/// passivated.
+/// Schedules the in-process timeouts a resident entity holds: the step deadline, retry backoff, the
+/// workflow and pause deadlines, the graceful-shutdown grace window, query timeouts and the
+/// keep-alive tick. Each is armed fresh on every activation from a persisted absolute deadline (see
+/// <see cref="WorkflowRuntimeState{TState}"/>), so recovery reproduces the remaining wait.
+///
+/// Waking a <em>passivated</em> entity for a deadline belongs to
+/// <see cref="Sagant.Execution.IWorkflowDeadlineScheduler"/>, which bounds the lateness guarantee
+/// <c>D8</c> describes. This seam stays in-process, and replacing it affects every timeout listed
+/// above at once.
 /// </summary>
 public interface IWorkflowTimeoutScheduler
 {

@@ -15,17 +15,32 @@ public enum GroupOutcome { Succeeded, Failed }
 /// </summary>
 public sealed class ChildGroupResult
 {
-    private readonly IReadOnlyDictionary<string, ChildWorkflowRelationship> _members;
+    private IReadOnlyDictionary<string, ChildWorkflowRelationship>? _byId;
 
     public ChildGroupResult(GroupOutcome outcome, IReadOnlyList<ChildWorkflowRelationship> members)
     {
         Outcome = outcome;
-        _members = members.ToDictionary(m => m.ChildWorkflowId);
+        Members = members ?? throw new ArgumentNullException(nameof(members));
     }
 
     public GroupOutcome Outcome { get; }
 
-    public IReadOnlyList<string> WorkflowIds => _members.Keys.ToList();
+    /// <summary>
+    /// The group's members, in the order the group holds them.
+    ///
+    /// Public because this value is persisted: it reaches the resume step as that step's input, which
+    /// a runtime writes to its journal and reads back on recovery. A member a serializer cannot see is
+    /// a member it cannot restore, and the constructor would then be handed nothing to build from —
+    /// so what the lookups below read has to be visible here.
+    /// </summary>
+    public IReadOnlyList<ChildWorkflowRelationship> Members { get; }
+
+    /// <summary>Built on first use rather than in the constructor, so restoring one of these costs
+    /// nothing until something asks about a member.</summary>
+    private IReadOnlyDictionary<string, ChildWorkflowRelationship> ById =>
+        _byId ??= Members.ToDictionary(m => m.ChildWorkflowId);
+
+    public IReadOnlyList<string> WorkflowIds => Members.Select(m => m.ChildWorkflowId).ToList();
 
     public ChildStatus GetStatus(string workflowId) => Resolve(workflowId).Status;
 
@@ -55,7 +70,7 @@ public sealed class ChildGroupResult
     /// contract.</summary>
     public bool TryGet<TWorkflow, TState>(string workflowId, out TState? state) where TWorkflow : IWorkflowTypeInfo
     {
-        if (_members.TryGetValue(workflowId, out var member)
+        if (ById.TryGetValue(workflowId, out var member)
             && member.ChildWorkflowType == TWorkflow.WorkflowTypeName
             && member.Status == ChildStatus.Completed)
         {
@@ -82,5 +97,5 @@ public sealed class ChildGroupResult
     }
 
     private ChildWorkflowRelationship Resolve(string workflowId) =>
-        _members.TryGetValue(workflowId, out var member) ? member : throw new ChildNotInGroupException(workflowId);
+        ById.TryGetValue(workflowId, out var member) ? member : throw new ChildNotInGroupException(workflowId);
 }

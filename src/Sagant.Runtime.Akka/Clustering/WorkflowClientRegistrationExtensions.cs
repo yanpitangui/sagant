@@ -50,15 +50,34 @@ internal sealed class WorkflowHandleRegistry : IExtension
     }
 
     /// <summary>
-    /// Type-erased counterpart to <see cref="Resolve{TWorkflow}"/> — resolves by the persisted
-    /// <c>WorkflowType</c> string a <see cref="Protocol.ChildWorkflowRelationship"/> carries, since a
-    /// child actor only ever has that string, never a compile-time <c>TWorkflow</c> for its parent (or
-    /// vice versa). Internal-only: never exposed via <c>IWorkflowClient</c> — a workflow author always
-    /// addresses another workflow by <c>(WorkflowType, WorkflowId)</c> through
-    /// <c>IWorkflowClient.For&lt;TWorkflow&gt;</c>, which stays compile-time-typed; this exists purely
-    /// for the runtime's own child-lifecycle plumbing. Reuses <see cref="_targets"/> as the single
-    /// source of truth for the actual `(ShardRegion, ProducerAdapter)` pair, resolved through this one
-    /// extra string→<see cref="Type"/> lookup.
+    /// Type-erased counterpart to <see cref="Resolve{TWorkflow}"/>, for a caller holding the workflow
+    /// type as a runtime value. Backs <see cref="IWorkflowClient.For(string, string)"/>.
+    ///
+    /// Reaches the same registration by one extra string→<see cref="Type"/> lookup, so a name no
+    /// <c>WithWorkflow</c> call registered fails here exactly as an unregistered
+    /// <c>TWorkflow</c> fails in <see cref="Resolve{TWorkflow}"/>.
+    /// </summary>
+    public IWorkflowHandle Resolve(string workflowType, string entityId)
+    {
+        if (!_typesByName.TryGetValue(workflowType, out var type)
+            || !_factories.TryGetValue(type, out var factory)
+            || !_targets.TryGetValue(type, out var targets))
+        {
+            throw new InvalidOperationException(
+                $"No workflow is registered under the type name '{workflowType}'. " +
+                "Did you forget to call WithWorkflow<TWorkflow, TState>(...) during host configuration?");
+        }
+
+        return (IWorkflowHandle)factory(targets.ShardRegion, targets.ProducerAdapter, entityId);
+    }
+
+    /// <summary>
+    /// Resolves the shard region and producer adapter behind the persisted <c>WorkflowType</c> string
+    /// a <see cref="Protocol.ChildWorkflowRelationship"/> carries, since a child actor only ever has
+    /// that string, never a compile-time <c>TWorkflow</c> for its parent (or vice versa). Serves the
+    /// runtime's own child-lifecycle plumbing, where the refs are what is wanted and a handle would
+    /// be a layer to unwrap. Reuses <see cref="_targets"/> as the single source of truth for the
+    /// actual `(ShardRegion, ProducerAdapter)` pair.
     /// </summary>
     internal bool TryResolveByTypeName(string workflowTypeName, out (IActorRef ShardRegion, IActorRef ProducerAdapter) targets)
     {

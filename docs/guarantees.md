@@ -49,10 +49,35 @@ when the instance next activates, firing immediately if already past. A deadline
 *lost* (D2), but while an instance is passivated its lateness is bounded by whatever next activates
 it rather than by the deadline.
 
-Because a workflow legitimately sits idle while holding a deadline, `WithWorkflow` disables cluster
-sharding's idle passivation by default, overriding its 120-second default. The cost is that instances
-stay resident until terminal; a deployment with many long-lived workflows can trade that back through
-`configureShardOptions`, accepting the lateness.
+`WithWorkflow` leaves cluster sharding's 120-second idle passivation on, so an instance holds memory
+while it is doing something and releases it while it waits. `D8a` keeps work in progress resident;
+`D8b` is what keeps a waiting instance's deadline firing near its instant. Setting
+`PassivateIdleEntityAfter` to `TimeSpan.Zero` through `configureShardOptions` holds every instance
+resident instead, at the memory cost that implies.
+
+**D8b — A deadline scheduler bounds the lateness.**
+`WithWorkflowDeadlines(readJournalPluginId)` starts a projection that reads each instance's deadlines
+out of the journal and a cluster singleton that wakes an instance as its own comes up. With it, a
+deployment turns idle passivation on through `configureShardOptions` and keeps deadlines firing near
+their instant: an instance stays resident while it is working (`D8a`) and is brought back when it is
+due.
+
+Arms are derived from the same events that record the deadline, so an instance that recorded one and
+then went quiet is always in the index — and enabling the scheduler on a running deployment finds
+every instance already waiting, reading the journal from its start.
+
+Waking is at-least-once and may be late. A wake carries no instruction and writes nothing: it
+activates the instance, which re-arms its own deadlines from their persisted instants and fires any
+already past. So a wake that arrives twice costs an activation, and one that is dropped is retried,
+because only the instance's own next event retires an entry.
+
+Deadlines nearer than `WorkflowDeadlineSettings.ExternalArmThreshold` are left to the instance's own
+timer, which is exact — step timeouts and retry backoff never reach the index.
+
+A scheduler is optional: a deployment whose deadlines all land inside the passivation window needs
+none. An instance arming one that outlasts its own residency while no scheduler is running logs a
+warning naming both, once per instance, so the lateness it is about to accept is stated rather than
+discovered.
 
 **D8a — Work in progress keeps its instance resident.**
 Cluster sharding measures idleness by the messages it routes to an entity, and an instance running a

@@ -47,6 +47,7 @@ public readonly struct CommandDescriptor<TState>
         Workflow<TState> workflow,
         TState state,
         object command,
+        string workflowId = "",
         ActivityContext parentContext = default,
         IEnumerable<ActivityLink>? links = null,
         Action<Activity>? configureActivity = null)
@@ -60,7 +61,7 @@ public readonly struct CommandDescriptor<TState>
 
         try
         {
-            var result = _invoke(workflow, new CommandContext<TState>(state), command);
+            var result = _invoke(workflow, new CommandContext<TState>(state, workflowId), command);
             // Reached only for a handler that returns successfully — a thrown exception is
             // surfaced on the Activity above via the catch block below, same split as a step's
             // sagant.step.duration "error" outcome.

@@ -1,5 +1,6 @@
 using Sagant.Clients;
 using Sagant.Descriptors;
+using Sagant.Execution;
 using Sagant.Protocol;
 
 namespace Sagant.Runtime.Akka.Clustering;
@@ -12,6 +13,9 @@ internal sealed class WorkflowClient : IWorkflowClient
 
     public IWorkflowHandle<TWorkflow> For<TWorkflow>(string entityId) where TWorkflow : class =>
         _registry.Resolve<TWorkflow>(entityId);
+
+    public IWorkflowHandle For(string workflowType, string entityId) =>
+        _registry.Resolve(workflowType, entityId);
 }
 
 internal sealed class WorkflowHandle<TWorkflow, TState> : IWorkflowHandle<TWorkflow>
@@ -58,6 +62,9 @@ internal sealed class WorkflowHandle<TWorkflow, TState> : IWorkflowHandle<TWorkf
 
     public Task<WorkflowStatus> GetStatus(TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
         _inner.GetStatus(timeout, cancellationToken);
+
+    public Task<Done> Wake(WorkflowTimerKind kind, TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
+        _inner.Wake(kind, timeout, cancellationToken);
 
     public Task<WorkflowResult<TResultState>> RunAndAwaitResult<TResultState>(
         object command, TimeSpan timeout, string? idempotencyKey = null, CancellationToken cancellationToken = default)

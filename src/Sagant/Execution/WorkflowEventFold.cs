@@ -37,6 +37,8 @@ public static class WorkflowEventFold
                 StepDeadline = e.StepDeadline,
                 PauseDeadline = null,
                 PauseTimeoutStepName = null,
+                HoldDeadline = null,
+                HoldTimeoutStepName = null,
                 RetryDelayUntil = null,
                 LastTraceParent = e.TraceParent ?? envelope.LastTraceParent,
             },
@@ -71,6 +73,8 @@ public static class WorkflowEventFold
                 StepDeadline = null,
                 PauseDeadline = null,
                 PauseTimeoutStepName = null,
+                HoldDeadline = null,
+                HoldTimeoutStepName = null,
                 RetryDelayUntil = null,
                 LastTraceParent = e.TraceParent ?? envelope.LastTraceParent,
             },
@@ -86,6 +90,8 @@ public static class WorkflowEventFold
                 StepDeadline = null,
                 PauseDeadline = null,
                 PauseTimeoutStepName = null,
+                HoldDeadline = null,
+                HoldTimeoutStepName = null,
                 RetryDelayUntil = null,
                 LastTraceParent = e.TraceParent ?? envelope.LastTraceParent,
             },
@@ -104,6 +110,8 @@ public static class WorkflowEventFold
                 WorkflowDeadline = null,
                 PauseDeadline = null,
                 PauseTimeoutStepName = null,
+                HoldDeadline = null,
+                HoldTimeoutStepName = null,
                 RetryDelayUntil = null,
                 Outcome = null,
                 Children = null,
@@ -112,7 +120,12 @@ public static class WorkflowEventFold
             },
 
             // The step name and input survive, so a later resume knows what to re-execute.
-            WorkflowEvent.RunSuspended => envelope with { Status = WorkflowStatus.Suspended },
+            WorkflowEvent.RunSuspended e => envelope with
+            {
+                Status = WorkflowStatus.Suspended,
+                HoldDeadline = e.HoldDeadline,
+                HoldTimeoutStepName = e.HoldTimeoutStepName,
+            },
 
             // Reaches the same held status, carrying what stopped it. The retry count is left where
             // the exhausted budget put it, so a reader sees how many attempts ran; resuming resets it.
@@ -122,6 +135,8 @@ public static class WorkflowEventFold
                 ParkedFailure = e.Failure,
                 StepDeadline = null,
                 RetryDelayUntil = null,
+                HoldDeadline = e.HoldDeadline,
+                HoldTimeoutStepName = e.HoldTimeoutStepName,
                 LastTraceParent = e.TraceParent ?? envelope.LastTraceParent,
             },
 
@@ -131,8 +146,11 @@ public static class WorkflowEventFold
                 RetryCount = 0,
                 StepDeadline = e.StepDeadline,
                 RetryDelayUntil = null,
-                // The run is live again, whatever comes of the retry.
+                // The run is live again, whatever comes of the retry, and the hold it was under is
+                // over — so whatever that hold was waiting for stops waiting too.
                 ParkedFailure = null,
+                HoldDeadline = null,
+                HoldTimeoutStepName = null,
             },
 
             WorkflowEvent.ChildrenAwaited e => envelope with
@@ -143,6 +161,8 @@ public static class WorkflowEventFold
                 RetryCount = 0,
                 PauseDeadline = null,
                 PauseTimeoutStepName = null,
+                HoldDeadline = null,
+                HoldTimeoutStepName = null,
                 RetryDelayUntil = null,
                 LastTraceParent = e.TraceParent ?? envelope.LastTraceParent,
                 ChildGroupSequence = e.NextGroupSequence,

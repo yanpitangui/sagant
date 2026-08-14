@@ -72,6 +72,7 @@ public readonly struct StepDescriptor<TState>
         object? input,
         int attempt,
         CancellationToken cancellationToken,
+        string workflowId = "",
         ActivityContext parentContext = default,
         IEnumerable<ActivityLink>? links = null,
         Action<Activity>? configureActivity = null)
@@ -86,7 +87,7 @@ public readonly struct StepDescriptor<TState>
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            var result = await _invoke(workflow, new StepContext<TState>(state, attempt, cancellationToken), input).ConfigureAwait(false);
+            var result = await _invoke(workflow, new StepContext<TState>(state, attempt, cancellationToken, workflowId), input).ConfigureAwait(false);
             activity?.SetStatus(ActivityStatusCode.Ok);
             WorkflowDiagnostics.RecordStepDuration(workflow.WorkflowTypeName, Name, attempt, stopwatch.Elapsed, "ok");
             return result;

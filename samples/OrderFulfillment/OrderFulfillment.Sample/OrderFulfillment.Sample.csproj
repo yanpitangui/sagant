@@ -3,6 +3,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Sagant\Sagant.csproj" />
     <ProjectReference Include="..\..\..\src\Sagant.Runtime.Akka\Sagant.Runtime.Akka.csproj" />
+    <ProjectReference Include="..\..\..\src\Sagant.Scheduling\Sagant.Scheduling.csproj" />
+    <ProjectReference Include="..\..\..\src\Sagant.Scheduling.Akka\Sagant.Scheduling.Akka.csproj" />
     <!-- Sagant's own package now bundles this generator under analyzers/dotnet/cs (see
          Sagant.csproj), so a real `PackageReference Include="Sagant"` consumer needs nothing else.
          This sample uses in-repo ProjectReferences instead, though, and MSBuild's OutputItemType

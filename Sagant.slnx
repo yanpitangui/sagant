@@ -8,12 +8,15 @@
     <Project Path="src/Sagant/Sagant.csproj" />
     <Project Path="src/Sagant.Runtime.Akka/Sagant.Runtime.Akka.csproj" />
     <Project Path="src/Sagant.SourceGenerators/Sagant.SourceGenerators.csproj" />
+    <Project Path="src/Sagant.Scheduling/Sagant.Scheduling.csproj" />
+    <Project Path="src/Sagant.Scheduling.Akka/Sagant.Scheduling.Akka.csproj" />
     <Project Path="src/Sagant.Testing/Sagant.Testing.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Sagant.Tests/Sagant.Tests.csproj" />
     <Project Path="tests/Sagant.Runtime.Akka.Tests/Sagant.Runtime.Akka.Tests.csproj" />
     <Project Path="tests/Sagant.Runtime.Akka.ChaosTests/Sagant.Runtime.Akka.ChaosTests.csproj" />
+    <Project Path="tests/Sagant.Scheduling.Tests/Sagant.Scheduling.Tests.csproj" />
     <Project Path="tests/Sagant.Docs.Tests/Sagant.Docs.Tests.csproj" />
   </Folder>
 </Solution>

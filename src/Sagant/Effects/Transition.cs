@@ -67,13 +67,20 @@ public abstract record Transition
     /// (the runtime driver generates a durable id at persist time), non-null only when a workflow
     /// author explicitly named the group.
     /// </summary>
+    /// <param name="Timeout">How long this group waits before <paramref name="TimeoutStepName"/>
+    /// decides what to do about children that never finished. <c>null</c> waits for them however long
+    /// they take, which is the default.</param>
+    /// <param name="TimeoutStepName">The step run when <paramref name="Timeout"/> passes. Required
+    /// alongside it: a deadline with nothing to run would leave the parent nowhere to go.</param>
     public sealed record AwaitChildrenTransition(
         string? GroupId,
         IReadOnlyList<ChildStart> Children,
         CompletionPolicy CompletionPolicy,
         FailurePolicy FailurePolicy,
         RemainingChildrenPolicy RemainingChildrenPolicy,
-        string ResumeStepName) : Transition;
+        string ResumeStepName,
+        TimeSpan? Timeout = null,
+        string? TimeoutStepName = null) : Transition;
 
     public sealed record NoTransition : Transition
     {

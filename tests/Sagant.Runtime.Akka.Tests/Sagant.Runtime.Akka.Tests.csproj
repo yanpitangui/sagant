@@ -19,6 +19,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Sagant\Sagant.csproj" />
     <ProjectReference Include="..\..\src\Sagant.Runtime.Akka\Sagant.Runtime.Akka.csproj" />
+    <ProjectReference Include="..\..\src\Sagant.Testing\Sagant.Testing.csproj" />
+    <ProjectReference Include="..\..\src\Sagant.Scheduling.Akka\Sagant.Scheduling.Akka.csproj" />
     <!-- Analyzer only, not the plain-assembly reference Sagant.Tests also needs — nothing here
          drives the generator programmatically (that's Sagant.Tests's StepRegistryGeneratorTests);
          this just needs [WorkflowStep]/[WorkflowCommandHandler] on EchoWorkflow.cs to actually get

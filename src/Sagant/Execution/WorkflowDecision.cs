@@ -10,6 +10,20 @@ public enum WorkflowTimerKind
 
     /// <summary>The pause deadline (<see cref="WorkflowRuntimeState{TState}.PauseDeadline"/>).</summary>
     Pause,
+
+    /// <summary>
+    /// The deadline on a held instance (<see cref="WorkflowRuntimeState{TState}.HoldDeadline"/>) —
+    /// how long an operator hold or a parked failure waits before the workflow decides for itself.
+    /// One per instance, since an instance is held once or not at all.
+    /// </summary>
+    Hold,
+
+    /// <summary>
+    /// The deadline on one awaited child group (<see cref="ChildGroupState.Deadline"/>) — how long a
+    /// parent waits for children that may never finish. An instance can await several groups, so a
+    /// key for this kind carries the group id in its discriminator.
+    /// </summary>
+    ChildGroup,
 }
 
 /// <summary>
@@ -41,10 +55,17 @@ public abstract record WorkflowDecision
     public sealed record RecordOutcome(WorkflowOutcome Outcome) : WorkflowDecision;
 
     /// <summary>Arm a live timer for a deadline the envelope now carries.</summary>
-    public sealed record ArmTimer(WorkflowTimerKind Kind, DateTimeOffset Deadline) : WorkflowDecision;
+    /// <param name="Discriminator">Which deadline of <paramref name="Kind"/>, for a kind an instance
+    /// holds several of. The group id for <see cref="WorkflowTimerKind.ChildGroup"/>, <c>null</c>
+    /// otherwise.</param>
+    public sealed record ArmTimer(
+        WorkflowTimerKind Kind, DateTimeOffset Deadline, string? Discriminator = null) : WorkflowDecision;
 
     /// <summary>Cancel a live timer whose deadline no longer applies.</summary>
-    public sealed record CancelTimer(WorkflowTimerKind Kind) : WorkflowDecision;
+    /// <param name="Discriminator">As <see cref="ArmTimer"/>. <c>null</c> for a kind an instance holds
+    /// one of, which cancels that one.</param>
+    public sealed record CancelTimer(
+        WorkflowTimerKind Kind, string? Discriminator = null) : WorkflowDecision;
 
     /// <summary>Begin executing <see cref="WorkflowRuntimeState{TState}.CurrentStepName"/>.</summary>
     public sealed record StartStep : WorkflowDecision

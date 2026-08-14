@@ -153,7 +153,7 @@ public sealed class WorkflowTestHarness<TWorkflow, TState>
                 $"No [WorkflowCommandHandler] registered for {typeof(TCommand)} on {typeof(TWorkflow).Name}.");
         }
 
-        var effect = descriptor.Invoke(Workflow, State, command);
+        var effect = descriptor.Invoke(Workflow, State, command, _identity.RoutableId);
         Apply(effect.Persistence);
         TrackTransition(effect.Transition, new TransitionCause.Command(typeof(TCommand).Name));
         return effect;
@@ -176,7 +176,7 @@ public sealed class WorkflowTestHarness<TWorkflow, TState>
                 $"No [WorkflowQuery] registered for {typeof(TQuery)} on {typeof(TWorkflow).Name}.");
         }
 
-        var effect = await descriptor.Invoke(Workflow, State, query, cancellationToken);
+        var effect = await descriptor.Invoke(Workflow, State, query, cancellationToken, _identity.RoutableId);
         return effect.Reply switch
         {
             Reply.ReplyValue rv => (TReply)rv.Value!,
@@ -272,6 +272,30 @@ public sealed class WorkflowTestHarness<TWorkflow, TState>
         return await RunUntilStopCore(handlerStepName, null, cancellationToken);
     }
 
+    /// <summary>
+    /// Checks whether the workflow is held — by <see cref="Suspend"/> or by a step that parked — and
+    /// its <see cref="WorkflowSettings.HoldTimeout"/> deadline has passed. If so, fires it exactly
+    /// like <c>WorkflowEntityActor</c> would: transitions into
+    /// <see cref="WorkflowSettings.HoldTimeoutStepName"/> and follows the step chain from there.
+    /// Advance a <c>FakeTimeProvider</c> passed to the constructor, then call this. Returns
+    /// <c>null</c> while the workflow is unheld, its hold names no deadline, or the deadline is still
+    /// ahead.
+    /// </summary>
+    public async Task<StepEffect<TState>?> RunHoldTimeoutIfDue(CancellationToken cancellationToken = default)
+    {
+        if (_envelope.Status != WorkflowStatus.Suspended
+            || _envelope.HoldDeadline is not { } deadline
+            || _envelope.HoldTimeoutStepName is not { } handlerStepName
+            || _timeProvider.GetUtcNow() < deadline)
+        {
+            return null;
+        }
+
+        // The transition into the handler step clears HoldDeadline/HoldTimeoutStepName, so one hold
+        // fires once — same as the actor, where the persisted envelope is what does it.
+        return await RunUntilStopCore(handlerStepName, null, cancellationToken);
+    }
+
     /// <summary>Checks whether the workflow's overall <see cref="WorkflowSettings.WorkflowTimeout"/>
     /// deadline (measured against the harness's <see cref="TimeProvider"/>) has passed while the
     /// workflow is actively <see cref="WorkflowStatus.Running"/>, and fires it exactly like
@@ -345,7 +369,8 @@ public sealed class WorkflowTestHarness<TWorkflow, TState>
     /// <see cref="WorkflowCommandException"/> when the workflow isn't in a status it can be
     /// suspended from — the same rejection a caller would see.
     /// </summary>
-    public void Suspend() => ApplyControl(WorkflowTransitionPlanner.PlanSuspend(_envelope, new TransitionCause.Control("Suspend")));
+    public void Suspend() => ApplyControl(WorkflowTransitionPlanner.PlanSuspend(
+        _envelope, new TransitionCause.Control("Suspend"), _timeProvider.GetUtcNow(), _settings));
 
     /// <summary>
     /// Puts a suspended workflow back to work and re-runs its current step from the beginning
@@ -462,13 +487,22 @@ public sealed class WorkflowTestHarness<TWorkflow, TState>
         while (true)
         {
             var effect = await RunStepCore(stepName, input, cancellationToken);
-            if (effect.Transition is not Transition.StepTransition next)
+
+            // A restart continues the chain at a step of its own, the same as an ordinary step
+            // transition — the planner emits StartStep for both. What it adds is that the history
+            // behind it becomes reclaimable, which is a driver's own act and nothing this harness
+            // holds.
+            (stepName, input) = effect.Transition switch
+            {
+                Transition.StepTransition next => (next.StepName, next.Input),
+                Transition.RestartTransition restart => (restart.StepName, restart.Input),
+                _ => (null, null),
+            };
+
+            if (stepName is null)
             {
                 return effect;
             }
-
-            stepName = next.StepName;
-            input = next.Input;
         }
     }
 
@@ -486,7 +520,7 @@ public sealed class WorkflowTestHarness<TWorkflow, TState>
             {
                 var attempt = _envelope.RetryCount + 1;
                 var startedAt = _timeProvider.GetUtcNow();
-                var effect = await descriptor.Invoke(Workflow, State, input, attempt, cancellationToken);
+                var effect = await descriptor.Invoke(Workflow, State, input, attempt, cancellationToken, _identity.RoutableId);
                 Apply(effect.Persistence);
                 TrackTransition(
                     effect.Transition,

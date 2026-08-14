@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Akka.NET registration for Sagant.Scheduling. Kept apart from Sagant.Scheduling so
+      that package depends on the core alone and stays usable from any runtime — this one is where
+      the Akka-specific wiring lives.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sagant.Scheduling\Sagant.Scheduling.csproj" />
+    <ProjectReference Include="..\Sagant.Runtime.Akka\Sagant.Runtime.Akka.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -66,6 +66,20 @@ public sealed record WorkflowRuntimeState<TState>(
     DateTimeOffset? WorkflowDeadline = null,
     DateTimeOffset? PauseDeadline = null,
     string? PauseTimeoutStepName = null,
+    /// <summary>
+    /// How long this instance stays held before it decides for itself, set when an operator holds it
+    /// or a parked failure stops it. Same durability as the deadlines above: an absolute instant,
+    /// re-armed on every activation, so a hold outlives a crash and a relocation at its
+    /// <em>remaining</em> length.
+    ///
+    /// A hold that waits for a person indefinitely leaves this <c>null</c>, which is the default: an
+    /// instance is released by a command, and a deadline is what a deployment adds when it wants one
+    /// to stop waiting eventually.
+    /// </summary>
+    DateTimeOffset? HoldDeadline = null,
+    /// <summary>The step run when <see cref="HoldDeadline"/> passes, releasing the instance into
+    /// whatever that step decides.</summary>
+    string? HoldTimeoutStepName = null,
     string? LastTraceParent = null,
     /// <summary>Set while waiting out a <c>RecoverStrategy.BackoffForAttempt</c> delay before a
     /// retry — same "persist an absolute deadline, re-arm a live timer on reactivation" durability

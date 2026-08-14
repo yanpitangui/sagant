@@ -1,13 +1,18 @@
+using Sagant.Execution;
 using Sagant.Protocol;
 
 namespace Sagant.Clients;
 
 /// <summary>
-/// A handle to one workflow instance, obtained via <see cref="IWorkflowClient.For{TWorkflow}"/>.
-/// The full surface for talking to that instance — sending commands, waiting on replies, and
-/// controlling its lifecycle.
+/// A handle to one workflow instance. The full surface for talking to that instance — sending
+/// commands, waiting on replies, and controlling its lifecycle.
+///
+/// Obtain it through <see cref="IWorkflowClient.For{TWorkflow}"/>, which names the workflow type at
+/// compile time and hands back the <see cref="IWorkflowHandle{TWorkflow}"/> form. The non-generic
+/// form here exists for infrastructure that resolves an instance from a type <em>name</em> —
+/// <see cref="IWorkflowClient.For(string, string)"/> — where the type is a runtime value.
 /// </summary>
-public interface IWorkflowHandle<TWorkflow>
+public interface IWorkflowHandle
 {
     string EntityId { get; }
 
@@ -113,6 +118,26 @@ public interface IWorkflowHandle<TWorkflow>
     Task<WorkflowStatus> GetStatus(TimeSpan? timeout = null, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Activates the instance so it re-arms its own deadlines. Infrastructure calls this when a
+    /// deadline it holds on the instance's behalf comes due — see
+    /// <see cref="Sagant.Execution.IWorkflowDeadlineScheduler"/>.
+    ///
+    /// Writes nothing. Activation is the whole effect: the instance re-arms every pending deadline
+    /// from its persisted absolute instant as it recovers, and one already past fires straight away.
+    /// A wake that arrives twice, arrives early, or arrives for an instance that has since moved on
+    /// is therefore a no-op, which is what lets the caller's contract stay at-least-once.
+    ///
+    /// Replies once the instance is up and has recovered, so a caller can use the round trip as a
+    /// backpressure signal when waking many instances at once.
+    /// </summary>
+    /// <param name="kind">Which deadline prompted the wake. Recorded for tracing; the instance
+    /// re-arms all of its deadlines regardless of which one is named.</param>
+    /// <param name="timeout">How long to wait for the instance to come up.</param>
+    /// <param name="cancellationToken">Cancels waiting for the reply.</param>
+    Task<Done> Wake(
+        WorkflowTimerKind kind, TimeSpan? timeout = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Sends <paramref name="command"/>, then waits for the run to finish and returns how it ended
     /// along with its final state — going beyond a mere acknowledgement the command was accepted.
     ///
@@ -122,10 +147,9 @@ public interface IWorkflowHandle<TWorkflow>
     /// own control flow.
     ///
     /// The explicit <typeparamref name="TState"/> here is the one place it can't be erased — it must
-    /// match the actual state type of <typeparamref name="TWorkflow"/>, which is not checked at
-    /// compile time by this interface alone; the implementation checks it at runtime and throws
-    /// immediately on a mismatch right at the call site, well before it could otherwise surface as an
-    /// obscure cast exception three layers down.
+    /// match the workflow's actual state type, which is checked at runtime and throws immediately on
+    /// a mismatch right at the call site, well before it could otherwise surface as an obscure cast
+    /// exception three layers down.
     /// </summary>
     /// <param name="command">The command to deliver.</param>
     /// <param name="timeout">How long to wait for the workflow to reach a terminal status.</param>
@@ -143,3 +167,13 @@ public interface IWorkflowHandle<TWorkflow>
     /// <param name="cancellationToken">Cancels waiting for the workflow to complete.</param>
     Task<WorkflowResult<TState>> RunAndAwaitResult<TState>(object command, TimeSpan timeout, string? idempotencyKey = null, CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// A handle carrying its workflow type at compile time, obtained via
+/// <see cref="IWorkflowClient.For{TWorkflow}"/>.
+///
+/// <typeparamref name="TWorkflow"/> appears in no member: it identifies which workflow the handle
+/// was resolved for, which is settled by the time the handle exists. It survives as a type parameter
+/// so a call site reads as the workflow it addresses, and so a mistyped name fails to compile.
+/// </summary>
+public interface IWorkflowHandle<TWorkflow> : IWorkflowHandle;

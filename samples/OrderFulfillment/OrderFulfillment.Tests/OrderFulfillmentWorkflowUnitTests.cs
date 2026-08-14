@@ -23,7 +23,17 @@ public class OrderFulfillmentWorkflowUnitTests
         new(new OrderFulfillmentWorkflow(
             payment ?? new FakePaymentService(),
             notification ?? new FakeNotificationService(),
-            faults ?? new FaultInjectionRegistry()));
+            faults ?? new FaultInjectionRegistry()),
+            instanceId: OrderId);
+
+    /// <summary>The order instance these tests drive. Named, because an item's entity id is scoped to
+    /// its order and a test asserting on children has to know which order they belong to.</summary>
+    private const string OrderId = "order-1";
+
+    /// <summary>The id an item's own entity gets, scoped to its order the same way the workflow
+    /// scopes it — an item id arrives on the command, and a command is not unique to one order.</summary>
+    private static string ItemId(string itemId) =>
+        OrderFulfillmentWorkflow.ItemWorkflowId(OrderId, itemId);
 
     private static WorkflowTestHarness<ItemFulfillmentWorkflow, ItemState> CreateItemHarness(
         FakeInventoryService? inventory = null, FakeShippingService? shipping = null) =>
@@ -36,8 +46,8 @@ public class OrderFulfillmentWorkflowUnitTests
         var itemA = CreateItemHarness();
         var itemB = CreateItemHarness();
         var harness = CreateHarness(notification: notification)
-            .WithChild("item-a", itemA)
-            .WithChild("item-b", itemB);
+            .WithChild(ItemId("item-a"), itemA)
+            .WithChild(ItemId("item-b"), itemB);
 
         var items = new[] { new OrderLineItem("item-a", 300), new OrderLineItem("item-b", 200) };
         var afterFulfill = await harness.RunUntilStop(new PlaceOrder("cust-1", items, "1 Main St"));
@@ -54,8 +64,8 @@ public class OrderFulfillmentWorkflowUnitTests
         Assert.Equal(ItemStatus.Shipped, itemA.State.Status);
         Assert.Equal(ItemStatus.Shipped, itemB.State.Status);
 
-        await harness.DeliverChildLifecycle("item-a");
-        await harness.DeliverChildLifecycle("item-b");
+        await harness.DeliverChildLifecycle(ItemId("item-a"));
+        await harness.DeliverChildLifecycle(ItemId("item-b"));
 
         Assert.Equal(OrderStatus.Succeeded, harness.State.Status);
         Assert.Single(notification.Sent);
@@ -72,8 +82,8 @@ public class OrderFulfillmentWorkflowUnitTests
             ReserveOverride = (_, _) => throw new InvalidOperationException("out of stock"),
         });
         var harness = CreateHarness(payment: payment)
-            .WithChild("item-a", itemA)
-            .WithChild("item-b", itemB);
+            .WithChild(ItemId("item-a"), itemA)
+            .WithChild(ItemId("item-b"), itemB);
 
         var items = new[] { new OrderLineItem("item-a", 300), new OrderLineItem("item-b", 200) };
         await harness.RunUntilStop(new PlaceOrder("cust-2", items, "1 Main St"));
@@ -85,8 +95,8 @@ public class OrderFulfillmentWorkflowUnitTests
         await itemB.RunUntilStop(new FulfillItem("cust-2", 200, "1 Main St"));
         Assert.Equal(ItemStatus.Failed, itemB.State.Status);
 
-        await harness.DeliverChildLifecycle("item-a");
-        await harness.DeliverChildLifecycle("item-b");
+        await harness.DeliverChildLifecycle(ItemId("item-a"));
+        await harness.DeliverChildLifecycle(ItemId("item-b"));
 
         Assert.Equal(OrderStatus.Failed, harness.State.Status);
         Assert.Contains(payment.Refunded, id => id == harness.State.PaymentId);

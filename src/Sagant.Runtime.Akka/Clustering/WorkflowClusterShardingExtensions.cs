@@ -26,6 +26,17 @@ namespace Sagant.Runtime.Akka.Clustering;
 /// </summary>
 public static class WorkflowClusterShardingExtensions
 {
+    /// <summary>
+    /// How long an idle instance stays resident before cluster sharding passivates it. Override it
+    /// per deployment through <c>configureShardOptions</c>; <see cref="TimeSpan.Zero"/> there holds
+    /// every instance resident until it reaches a terminal status.
+    ///
+    /// Keep <see cref="Deadlines.WorkflowDeadlineSettings.ExternalArmThreshold"/> below whatever this
+    /// is set to, so a deadline the deadline scheduler leaves alone is one the instance is still
+    /// resident to fire.
+    /// </summary>
+    public static readonly TimeSpan DefaultPassivateIdleEntityAfter = TimeSpan.FromSeconds(120);
+
     /// <param name="configureShardOptions">
     /// Deployment-level shard tuning. Runs after this method sets its own defaults, so the callback
     /// sees — and may override — them: <c>HandOffStopMessage</c> is a <c>GracefulShutdown</c> so an
@@ -89,19 +100,18 @@ public static class WorkflowClusterShardingExtensions
             // via configureShardOptions below for callers who want the plain PoisonPill back.
             HandOffStopMessage = new GracefulShutdown(),
 
-            // Idle passivation off (TimeSpan.Zero), overriding ClusterSharding's own 120-second
-            // default. A workflow instance legitimately sits idle while holding a deadline — a pause
-            // awaiting approval, a long workflow timeout — and a live timer belongs to a live
-            // instance. Under the stock default, an instance holding a deadline hours away
-            // passivates two minutes in, its timer dies with it, and the deadline only fires
-            // whenever something next activates the instance (see docs/guarantees.md D8).
+            // Idle passivation on at ClusterSharding's own 120-second window, so an instance holds
+            // memory while it is doing something and releases it while it waits. Two mechanisms make
+            // that safe. Work in progress keeps its instance resident, because a step running
+            // off-actor-thread announces itself to the shard (guarantee D8a, see keepAliveInterval
+            // below). A deadline further out than the window is recorded by
+            // WithWorkflowDeadlines(...), which wakes the instance when it comes due (guarantee D8b).
             //
-            // The cost is memory: instances stay resident until they reach a terminal status. A
-            // deployment with many long-lived workflows can trade that back via
-            // configureShardOptions, accepting the lateness — work in progress survives it either way
-            // (see the keepAliveInterval below). The fix that needs neither trade is a durable timer
-            // waking an instance for its own deadline — see docs/deferred-work.md G4.
-            PassivateIdleEntityAfter = TimeSpan.Zero,
+            // A deployment that starts no deadline scheduler gets D8's lateness on the deadlines that
+            // outlast this window: they fire whenever something next activates the instance. Setting
+            // this to TimeSpan.Zero through configureShardOptions holds every instance resident
+            // instead, at the memory cost that implies.
+            PassivateIdleEntityAfter = DefaultPassivateIdleEntityAfter,
         };
         configureShardOptions?.Invoke(shardOptions);
 

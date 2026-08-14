@@ -1,5 +1,7 @@
 using Sagant.Clients;
 using Sagant.Runtime.Akka.Clustering;
+using Sagant.Runtime.Akka.Deadlines;
+using Sagant.Scheduling;
 using Sagant.Protocol;
 using Aaron.Akka.Aspire;
 using Aaron.Akka.Discovery.Redis;
@@ -82,17 +84,35 @@ builder.Services.AddAkka("order-fulfillment-demo", (akkaBuilder, sp) =>
                 }
             },
             clusterConfigure: c => c.Roles = ["sample"])
-        .WithWorkflow<OrderFulfillmentWorkflow, OrderState>(() => new OrderFulfillmentWorkflow(
-            sp.GetRequiredService<IPaymentService>(),
-            sp.GetRequiredService<INotificationService>(),
-            sp.GetRequiredService<FaultInjectionRegistry>()))
+        .WithWorkflow<OrderFulfillmentWorkflow, OrderState>(
+            () => new OrderFulfillmentWorkflow(
+                sp.GetRequiredService<IPaymentService>(),
+                sp.GetRequiredService<INotificationService>(),
+                sp.GetRequiredService<FaultInjectionRegistry>()),
+            // Ten seconds, well under the 120-second default, so an order awaiting approval
+            // passivates halfway through its 20-second approval window. The deadline scheduler
+            // registered below is then what brings it back to auto-cancel — the demo shows a
+            // deadline firing for an instance that is no longer in memory.
+            configureShardOptions: options => options.PassivateIdleEntityAfter = TimeSpan.FromSeconds(10))
         // A second WithWorkflow call for a different workflow type on the same ActorSystem — see
         // WorkflowEventPubSubBridge's own doc comment confirming exactly one bridge instance
         // still ends up registered regardless of how many workflow types share it.
         .WithWorkflow<ItemFulfillmentWorkflow, ItemState>(() => new ItemFulfillmentWorkflow(
             sp.GetRequiredService<IInventoryService>(),
-            sp.GetRequiredService<IShippingService>()));
-}).AddWorkflowClient();
+            sp.GetRequiredService<IShippingService>()))
+        // Registers the schedule workflow. Ten seconds idle, well under the two minutes between
+        // occurrences, so the schedule really is gone while it waits and the deadline scheduler
+        // below is what brings it back — which is the thing worth watching.
+        .WithScheduling(sp, configureShardOptions: o => o.PassivateIdleEntityAfter = TimeSpan.FromSeconds(10))
+        // Reads every instance's deadlines out of the same journal the workflows write to, and wakes
+        // one as its own comes due. This is what makes the passivation window above safe: an order
+        // waiting for approval releases its memory and still auto-cancels on time.
+        .WithWorkflowDeadlines(
+            SqlReadJournal.Identifier,
+            // Below the 10-second passivation window, so a deadline landing inside that window is
+            // left to the instance's own timer and everything past it is recorded here.
+            settings => settings.ExternalArmThreshold = TimeSpan.FromSeconds(5));
+}).AddWorkflowClient().AddWorkflowDeadlines();
 
 builder.Services.AddOpenTelemetry()
     .WithTracing(t => t.AddSource(WorkflowDiagnostics.SourceName).AddOtlpExporter())
@@ -187,6 +207,63 @@ _ = Task.Run(async () =>
         // Catch-up is a convenience for this replica's own view; the live subscription above keeps
         // working regardless, so a failure here leaves the UI showing what it observes from now on.
         eventLogger.LogWarning(ex, "catching up from the recorded event feed failed");
+    }
+});
+
+// A standing order placed every fifteen seconds, by a schedule that is itself a workflow.
+//
+// Worth watching for what it costs: between occurrences the schedule holds a pause with a deadline
+// fifteen seconds out, past this deployment's ten-second passivation window, so it releases its
+// memory and the deadline scheduler brings it back. Nothing is resident while it waits.
+//
+// The same command every time, so each occurrence's own entity id is what separates the runs — and
+// that id comes from the instant the occurrence was scheduled for, so a fire that happens twice
+// lands on the same order rather than placing two.
+//
+// Idempotent on a restart: the schedule has a fixed id, so a replica coming up sends StartSchedule
+// to the instance that already exists and replaces its spec rather than starting a second one.
+_ = Task.Run(async () =>
+{
+    try
+    {
+        var client = app.Services.GetRequiredService<IWorkflowClient>();
+
+        // Asked rather than sent, so a schedule that never reaches its entity says so here. A
+        // fire-and-forget send would sit buffered behind a shard region still finding its
+        // coordinator and report nothing, which reads as a schedule that simply never fires.
+        var accepted = await client.For<ScheduleWorkflow>("standing-order").Request<StartSchedule, string>(
+            StartSchedule.For<OrderFulfillmentWorkflow>(
+                spec: new EverySpec(TimeSpan.FromSeconds(15)),
+                command: new PlaceOrder(
+                    CustomerId: "standing-order-customer",
+                    // An array rather than a collection expression: targeting IReadOnlyList<T> with
+                    // one element compiles to a compiler-generated list type the JSON serializer
+                    // cannot construct on the way back. A schedule stores its command and replays it
+                    // from the journal, so what it holds has to survive a round trip.
+                    Items: new[] { new OrderLineItem("SKU-STANDING", 1) },
+                    ShippingAddress: "1 Recurring Way"),
+                // Fifteen seconds is close enough to how long an order takes that this matters: an
+                // occurrence arriving while the previous one is still running is passed over rather
+                // than run alongside it. A skipped occurrence is counted, so the schedule's status
+                // says so.
+                overlap: OverlapPolicy.Skip,
+                // A replica down for a while places one order on the way back, rather than the
+                // dozens it slept through.
+                catchUpWindow: TimeSpan.FromSeconds(30)),
+            timeout: TimeSpan.FromSeconds(90));
+
+        // Read back rather than assumed: this says when the first occurrence is actually due, which
+        // is the difference between a schedule that is waiting and one that was never started.
+        var status = await client.For<ScheduleWorkflow>("standing-order")
+            .Query<GetScheduleStatus, ScheduleStatus>(new GetScheduleStatus(), TimeSpan.FromSeconds(30));
+
+        eventLogger.LogInformation(
+            "standing order schedule {Accepted}; next occurrence at {NextFire}, fired {FireCount} so far",
+            accepted, status.NextFireUtc, status.FireCount);
+    }
+    catch (Exception ex)
+    {
+        eventLogger.LogWarning(ex, "registering the standing order schedule failed");
     }
 });
 

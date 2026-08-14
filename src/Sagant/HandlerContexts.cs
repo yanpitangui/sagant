@@ -21,10 +21,16 @@ namespace Sagant;
 /// retry. The same numbering <c>TransitionCause.StepSucceeded</c>/<c>StepFailed</c> report and the
 /// <c>sagant.step.duration</c> metric tags.</param>
 /// <param name="CancellationToken">Cancelled when the runtime stops waiting on this step.</param>
+/// <param name="WorkflowId">Which instance this is — the routable id another workflow addresses it
+/// by, and the one a child id is worth scoping to. A handler that names something after its own
+/// instance needs this: an identifier taken from a command is the same for every instance that
+/// command is sent to, which is exactly what a schedule sending one command repeatedly produces.
+/// </param>
 public readonly record struct StepContext<TState>(
     TState State,
     int Attempt,
-    CancellationToken CancellationToken);
+    CancellationToken CancellationToken,
+    string WorkflowId = "");
 
 /// <summary>
 /// Everything a command handler is given: the workflow state to decide against.
@@ -38,7 +44,9 @@ public readonly record struct StepContext<TState>(
 /// <see cref="StepContext{TState}.State"/>.
 /// </summary>
 /// <param name="State">The workflow state this command decides against.</param>
-public readonly record struct CommandContext<TState>(TState State);
+/// <param name="WorkflowId">Which instance this is — see <see cref="StepContext{TState}.WorkflowId"/>.
+/// </param>
+public readonly record struct CommandContext<TState>(TState State, string WorkflowId = "");
 
 /// <summary>
 /// Everything a query handler is given: the workflow state to read, and a cancellation token.
@@ -54,6 +62,9 @@ public readonly record struct CommandContext<TState>(TState State);
 /// </summary>
 /// <param name="State">Snapshot of the workflow state at dispatch time.</param>
 /// <param name="CancellationToken">Cancelled on query timeout or workflow stop.</param>
+/// <param name="WorkflowId">Which instance this is — see <see cref="StepContext{TState}.WorkflowId"/>.
+/// </param>
 public readonly record struct QueryContext<TState>(
     TState State,
-    CancellationToken CancellationToken);
+    CancellationToken CancellationToken,
+    string WorkflowId = "");

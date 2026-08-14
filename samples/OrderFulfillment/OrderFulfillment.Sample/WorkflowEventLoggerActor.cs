@@ -34,6 +34,10 @@ internal sealed class WorkflowEventLoggerActor : ReceiveActor
     public WorkflowEventLoggerActor(
         ILogger logger, OrderReadModelRepository repo, OrderChangeSignal changeSignal)
     {
+        // Orders this replica has already registered, so the check above costs nothing after the
+        // first event about one.
+        var registered = new HashSet<string>();
+
         async Task Record(WorkflowFeedItem item, string what, Func<Task> write)
         {
             try
@@ -48,8 +52,37 @@ internal sealed class WorkflowEventLoggerActor : ReceiveActor
 
         ReceiveAsync<WorkflowFeedItem>(async item =>
         {
+            // This read model is about orders, and every row it writes hangs off a workflow_views row
+            // OrderPlacementService created before the run began. A workflow that never went through
+            // that path — a schedule, say — has no such row, so its events belong to whatever reads
+            // its own history rather than to this one.
+            if (item.WorkflowType is not (nameof(OrderFulfillmentWorkflow) or nameof(ItemFulfillmentWorkflow)))
+            {
+                return;
+            }
+
             var id = item.EntityId;
             var at = item.Timestamp;
+
+            // An order this replica did not place — one a schedule started — has none of the rows the
+            // writes below hang off, so it is registered on first sight. Once per id per replica,
+            // since a schedule places one every couple of minutes and this is a read model, not a
+            // hot path.
+            if (registered.Add(id))
+            {
+                if (item.WorkflowType == nameof(OrderFulfillmentWorkflow))
+                {
+                    await Record(item, "registration", () => repo.EnsureOrderRegistered(id, "scheduled"));
+                }
+                else if (item.WorkflowType == nameof(ItemFulfillmentWorkflow)
+                         && id.IndexOf('#', StringComparison.Ordinal) is > 0 and var separator)
+                {
+                    // An item is scoped to its order, so the order it belongs to is the part of its id
+                    // before the separator — which is what makes an item a schedule placed reachable
+                    // from the order the UI renders.
+                    await Record(item, "registration", () => repo.EnsureItemRegistered(id, id[..separator]));
+                }
+            }
 
             // The cause is what the workflow was reacting to; the event is what it did about it.
             // Reporting them separately keeps a retried step's error visible even though the run
