@@ -238,7 +238,7 @@ public class OrderFulfillmentWorkflowTests : Akka.TestKit.Xunit2.TestKit
             new PlaceOrder("cust-6", items, "1 Main St"), TimeSpan.FromSeconds(5));
 
         await AwaitConditionAsync(
-            async () => await actor.Ask<WorkflowStatus>(new GetStatus(), TimeSpan.FromSeconds(5)) == WorkflowStatus.Paused,
+            async () => (await actor.Ask<WorkflowStatusReply>(new GetStatus(), TimeSpan.FromSeconds(5))).Status == WorkflowStatus.Paused,
             TimeSpan.FromSeconds(5));
 
         Scheduler.Advance(OrderFulfillmentWorkflow.ApprovalPauseTimeout + TimeSpan.FromSeconds(1));

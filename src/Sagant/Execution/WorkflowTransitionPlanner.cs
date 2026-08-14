@@ -463,7 +463,14 @@ public static class WorkflowTransitionPlanner
     {
         var decisions = new List<WorkflowDecision>();
 
-        if (next.Status != previous.Status)
+        // A run beginning moves an instance off NotStarted, and landing on Running that way is the run
+        // starting. The counters this feeds read a move to Running as a resume, which a first step is
+        // not — step and outcome metrics are what cover a run starting. A first transition that lands
+        // anywhere else still reports: a run whose opening move is a pause has genuinely paused.
+        var beginning = previous.Status == WorkflowStatus.NotStarted
+            && next.Status == WorkflowStatus.Running;
+
+        if (next.Status != previous.Status && !beginning)
         {
             decisions.Add(new WorkflowDecision.RecordStatusChange(next.Status));
         }

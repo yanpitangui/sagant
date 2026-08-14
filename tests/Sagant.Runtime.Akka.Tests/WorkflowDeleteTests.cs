@@ -66,7 +66,7 @@ public class WorkflowDeleteTests : WorkflowActorTestKit
         // it waits for its Shard parent to echo the stop message back first (see PurgeStopMessage's
         // own doc comment) before it actually stops.
         actor.Tell(new GetStatus(), TestActor);
-        Assert.Equal(WorkflowStatus.Deleted, ExpectMsg<WorkflowStatus>());
+        Assert.Equal(WorkflowStatus.Deleted, ExpectMsg<WorkflowStatusReply>().Status);
 
         actor.Tell(new PurgeStopMessage(), TestActor);
         ExpectTerminated(actor);
@@ -95,7 +95,7 @@ public class WorkflowDeleteTests : WorkflowActorTestKit
         var recovered = CreateActor(persistenceId, script);
         recovered.Tell(new GetDiagnostics<TestState>(), TestActor);
         var diagnostics = ExpectMsg<Diagnostics<TestState>>();
-        Assert.Equal(WorkflowStatus.Running, diagnostics.Envelope.Status);
+        Assert.Equal(WorkflowStatus.NotStarted, diagnostics.Envelope.Status);
         Assert.Null(diagnostics.Envelope.CurrentStepName);
         Assert.Equal("initial", diagnostics.Envelope.UserState.Value);
     }
@@ -112,7 +112,7 @@ public class WorkflowDeleteTests : WorkflowActorTestKit
         ExpectMsg<string>();
 
         actor.Tell(new GetStatus(), TestActor);
-        Assert.Equal(WorkflowStatus.Finished, ExpectMsg<WorkflowStatus>());
+        Assert.Equal(WorkflowStatus.Finished, ExpectMsg<WorkflowStatusReply>().Status);
 
         // Purging an already-terminal workflow's leftover data is the primary use case, not an edge
         // case — no early-return the way ApplyTerminate has for an already-terminal status.
@@ -123,7 +123,7 @@ public class WorkflowDeleteTests : WorkflowActorTestKit
         var recovered = CreateActor(persistenceId, script);
         recovered.Tell(new GetDiagnostics<TestState>(), TestActor);
         var diagnostics = ExpectMsg<Diagnostics<TestState>>();
-        Assert.Equal(WorkflowStatus.Running, diagnostics.Envelope.Status);
+        Assert.Equal(WorkflowStatus.NotStarted, diagnostics.Envelope.Status);
     }
 
     [Fact]
@@ -190,7 +190,7 @@ public class WorkflowDeleteTests : WorkflowActorTestKit
         AwaitAssert(() =>
         {
             childActor.Tell(new GetStatus(), TestActor);
-            Assert.Equal(WorkflowStatus.Paused, ExpectMsg<WorkflowStatus>());
+            Assert.Equal(WorkflowStatus.Paused, ExpectMsg<WorkflowStatusReply>().Status);
         }, TimeSpan.FromSeconds(10));
 
         // The child is deleted directly (an operator cleaning it up), not reached via its own
@@ -231,7 +231,7 @@ public class WorkflowDeleteTests : WorkflowActorTestKit
         var recovered = CreateActor(persistenceId, script);
         recovered.Tell(new GetDiagnostics<TestState>(), TestActor);
         var diagnostics = ExpectMsg<Diagnostics<TestState>>();
-        Assert.Equal(WorkflowStatus.Running, diagnostics.Envelope.Status);
+        Assert.Equal(WorkflowStatus.NotStarted, diagnostics.Envelope.Status);
     }
 
     [Fact]

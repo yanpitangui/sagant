@@ -149,8 +149,19 @@ internal sealed class WorkflowRef<TWorkflow, TState>
     public Task<Done> Delete(string? reason = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
         _shardRegion.Ask<Done>(new WorkflowEnvelope(EntityId, new Delete(reason)), timeout, cancellationToken);
 
-    public Task<WorkflowStatus> GetStatus(TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
-        _shardRegion.Ask<WorkflowStatus>(new WorkflowEnvelope(EntityId, new GetStatus()), timeout, cancellationToken);
+    /// <summary>
+    /// Asks for <see cref="WorkflowStatusReply"/> and hands back the status inside it. The wrapper is
+    /// what survives the trip: an entity on another node answers over the wire, where a bare enum
+    /// travels as its number and arrives as one.
+    /// </summary>
+    public async Task<WorkflowStatus> GetStatus(
+        TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+    {
+        var reply = await _shardRegion.Ask<WorkflowStatusReply>(
+            new WorkflowEnvelope(EntityId, new GetStatus()), timeout, cancellationToken);
+
+        return reply.Status;
+    }
 
     public Task<Done> Wake(WorkflowTimerKind kind, TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
         _shardRegion.Ask<Done>(new WorkflowEnvelope(EntityId, new Wake(kind)), timeout, cancellationToken);

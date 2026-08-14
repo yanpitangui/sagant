@@ -204,6 +204,86 @@ public class ScheduleWorkflowTests
         Assert.Equal(1, harness.State.SkippedCount);
     }
 
+    /// <summary>
+    /// An id with no history behind it answers <see cref="WorkflowStatus.NotStarted"/>, and there is no
+    /// run there to overlap with. A schedule reading that as a live run would pass over every
+    /// occurrence after it and never place another, since nothing would ever move that id off it.
+    /// </summary>
+    [Fact]
+    public async Task WithSkipOverlap_AnOccurrenceWhoseHistoryIsAbsent_DoesNotHoldTheScheduleUp()
+    {
+        var (harness, client, clock) = Build();
+        await harness.RunUntilStop(Every(TimeSpan.FromHours(1), OverlapPolicy.Skip));
+
+        clock.Advance(TimeSpan.FromHours(1));
+        await harness.RunPauseTimeoutIfDue();
+        Assert.Single(client.Started);
+
+        client.PreviousStatus = WorkflowStatus.NotStarted;
+        clock.Advance(TimeSpan.FromHours(1));
+        await harness.RunPauseTimeoutIfDue();
+
+        Assert.Equal(2, client.Started.Count);
+        Assert.Equal(0, harness.State.SkippedCount);
+    }
+
+    /// <summary>
+    /// One occurrence that stalls short of terminal reports the same status for as long as it stays
+    /// stalled. Skipping is bounded so the schedule recovers on its own, which is what separates one
+    /// slow occurrence from a schedule that has stopped placing work.
+    /// </summary>
+    [Fact]
+    public async Task WithSkipOverlap_AStalledOccurrence_StopsHoldingTheScheduleUpAfterABoundedRun()
+    {
+        var (harness, client, clock) = Build();
+        await harness.RunUntilStop(Every(TimeSpan.FromHours(1), OverlapPolicy.Skip));
+
+        clock.Advance(TimeSpan.FromHours(1));
+        await harness.RunPauseTimeoutIfDue();
+        Assert.Single(client.Started);
+
+        // Never reaches terminal, however many occurrences come round.
+        client.PreviousStatus = WorkflowStatus.Running;
+
+        for (var i = 0; i < ScheduleWorkflow.MaxConsecutiveOverlapSkips; i++)
+        {
+            clock.Advance(TimeSpan.FromHours(1));
+            await harness.RunPauseTimeoutIfDue();
+        }
+
+        Assert.Single(client.Started);
+        Assert.Equal(ScheduleWorkflow.MaxConsecutiveOverlapSkips, harness.State.SkippedCount);
+
+        clock.Advance(TimeSpan.FromHours(1));
+        await harness.RunPauseTimeoutIfDue();
+
+        Assert.Equal(2, client.Started.Count);
+        // Placing one resets the run, so a schedule that recovers can be held up again later rather
+        // than being left permanently unable to skip.
+        Assert.Equal(0, harness.State.ConsecutiveOverlapSkips);
+    }
+
+    /// <summary>
+    /// The catch-up window is counted apart from the overlap check: a stale occurrence is stale on its
+    /// own terms, so no number of them in a row makes the schedule run one.
+    /// </summary>
+    [Fact]
+    public async Task AnOccurrenceOutsideTheCatchUpWindow_IsNotForcedThroughByTheSkipBound()
+    {
+        var (harness, client, clock) = Build();
+        await harness.RunUntilStop(
+            Every(TimeSpan.FromHours(1), OverlapPolicy.Skip, catchUp: TimeSpan.FromMinutes(1)));
+
+        for (var i = 0; i < ScheduleWorkflow.MaxConsecutiveOverlapSkips + 2; i++)
+        {
+            clock.Advance(TimeSpan.FromHours(2));
+            await harness.RunPauseTimeoutIfDue();
+        }
+
+        Assert.Empty(client.Started);
+        Assert.Equal(0, harness.State.ConsecutiveOverlapSkips);
+    }
+
     [Fact]
     public async Task WithAllowOverlap_AnOccurrenceRunsRegardless()
     {

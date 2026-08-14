@@ -43,7 +43,7 @@ public sealed class WorkflowProducerAdapter : ReceiveActor
         global::Akka.Actor.Props.Create(() => new WorkflowProducerAdapter(bufferCapacity));
 
     private readonly int _bufferCapacity;
-    private readonly Queue<(string EntityId, WorkflowEnvelope Envelope, IActorRef ReplyTo)> _pending = new();
+    private readonly Queue<(string EntityId, WorkflowEnvelope Envelope, IActorRef? ReplyTo)> _pending = new();
     private IActorRef? _sendNextTo;
 
     public WorkflowProducerAdapter(int bufferCapacity)
@@ -60,21 +60,26 @@ public sealed class WorkflowProducerAdapter : ReceiveActor
 
         Receive<Enqueue>(msg =>
         {
+            // Enqueued with no sender by a caller that wants the command delivered and has nothing to
+            // do with the acknowledgement — a child start, a parent notification. Akka.Delivery is what
+            // carries those to their entity, so the reply here would be a message with no reader.
+            var replyTo = Sender.Equals(Context.System.DeadLetters) ? null : Sender;
+
             if (_sendNextTo is { } sendNextTo)
             {
                 sendNextTo.Tell(new ShardingEnvelope(msg.EntityId, msg.Envelope));
                 _sendNextTo = null;
-                Sender.Tell(Done.Instance);
+                replyTo?.Tell(Done.Instance);
                 return;
             }
 
             if (_pending.Count >= _bufferCapacity)
             {
-                Sender.Tell(new Status.Failure(new ProducerBufferFullException(_bufferCapacity)));
+                replyTo?.Tell(new Status.Failure(new ProducerBufferFullException(_bufferCapacity)));
                 return;
             }
 
-            _pending.Enqueue((msg.EntityId, msg.Envelope, Sender));
+            _pending.Enqueue((msg.EntityId, msg.Envelope, replyTo));
         });
 
         Receive<CreateReplyWaiter>(msg =>
@@ -94,7 +99,7 @@ public sealed class WorkflowProducerAdapter : ReceiveActor
         var (entityId, envelope, replyTo) = _pending.Dequeue();
         sendNextTo.Tell(new ShardingEnvelope(entityId, envelope));
         _sendNextTo = null;
-        replyTo.Tell(Done.Instance);
+        replyTo?.Tell(Done.Instance);
     }
 
     /// <summary>

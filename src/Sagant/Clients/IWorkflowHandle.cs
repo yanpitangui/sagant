@@ -115,6 +115,14 @@ public interface IWorkflowHandle
     /// </summary>
     Task<Done> Delete(string? reason = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The engine-level status of this id.
+    ///
+    /// Asking activates the instance and leaves it otherwise untouched, so an id nothing has been sent
+    /// to answers <see cref="WorkflowStatus.NotStarted"/> — as does one whose history has been purged.
+    /// Treat that as "no run here", which is what separates an id worth waiting on from one that will
+    /// never report anything further.
+    /// </summary>
     Task<WorkflowStatus> GetStatus(TimeSpan? timeout = null, CancellationToken cancellationToken = default);
 
     /// <summary>

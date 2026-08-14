@@ -17,6 +17,9 @@ namespace Sagant.Scheduling;
 /// <param name="FireCount">How many occurrences have started.</param>
 /// <param name="SkippedCount">How many were passed over, by overlap policy or the catch-up window.
 /// </param>
+/// <param name="ConsecutiveOverlapSkips">How many occurrences in a row <see cref="OverlapPolicy.Skip"/>
+/// has passed over because the previous one looked unfinished. Bounds how long one occurrence can hold
+/// up the schedule — see <see cref="ScheduleWorkflow.MaxConsecutiveOverlapSkips"/>.</param>
 public sealed record ScheduleState(
     IScheduleSpec? Spec = null,
     string? TargetWorkflowType = null,
@@ -28,7 +31,8 @@ public sealed record ScheduleState(
     int FireCount = 0,
     int SkippedCount = 0,
     bool Paused = false,
-    string? LastStartedEntityId = null);
+    string? LastStartedEntityId = null,
+    int ConsecutiveOverlapSkips = 0);
 
 /// <summary>
 /// Runs a workflow on a schedule, by being a workflow itself.
@@ -129,6 +133,7 @@ public partial class ScheduleWorkflow : Workflow<ScheduleState>
         var started = state.LastStartedEntityId;
         var fireCount = state.FireCount;
         var skipped = state.SkippedCount;
+        var overlapSkips = state.ConsecutiveOverlapSkips;
 
         if (skip is null)
         {
@@ -136,10 +141,19 @@ public partial class ScheduleWorkflow : Workflow<ScheduleState>
             await _client.For(state.TargetWorkflowType, started)
                 .Send(state.TargetCommand, ctx.CancellationToken);
             fireCount++;
+            overlapSkips = 0;
         }
         else
         {
             skipped++;
+
+            // Counted only for the overlap reason, since that is the one that reads the previous
+            // occurrence and so the one a stalled occurrence can hold open. A run outside its
+            // catch-up window is stale on its own terms and stays skipped however often it happens.
+            if (skip == OverlapSkipReason)
+            {
+                overlapSkips++;
+            }
         }
 
         // Computed from the instant this occurrence was scheduled for, then advanced past anything
@@ -154,6 +168,7 @@ public partial class ScheduleWorkflow : Workflow<ScheduleState>
             FireCount = fireCount,
             SkippedCount = skipped,
             LastStartedEntityId = started,
+            ConsecutiveOverlapSkips = overlapSkips,
         };
 
         if (ended || next is null)
@@ -217,13 +232,42 @@ public partial class ScheduleWorkflow : Workflow<ScheduleState>
             return null;
         }
 
+        // Enough consecutive skips means the previous occurrence is treated as abandoned and this one
+        // runs. An occurrence that stalls short of terminal reports the same status for as long as it
+        // stays stalled, which would hold the schedule up for as long as the check is believed — so it
+        // is believed a bounded number of times.
+        if (state.ConsecutiveOverlapSkips >= MaxConsecutiveOverlapSkips)
+        {
+            return null;
+        }
+
         var status = await _client.For(state.TargetWorkflowType!, previous)
             .GetStatus(cancellationToken: cancellationToken);
 
-        return status is Protocol.WorkflowStatus.Finished or Protocol.WorkflowStatus.Deleted
+        // NotStarted counts as done: it means nothing was ever written under that id, so there is no
+        // run there to overlap with. An id whose history is absent answers this, and waiting on it
+        // would be waiting on something that will never report anything else.
+        return status is Protocol.WorkflowStatus.Finished
+            or Protocol.WorkflowStatus.Deleted
+            or Protocol.WorkflowStatus.NotStarted
             ? null
-            : "the previous occurrence is still running";
+            : OverlapSkipReason;
     }
+
+    /// <summary>Why an occurrence was passed over by <see cref="OverlapPolicy.Skip"/>, as opposed to by
+    /// the catch-up window. The two are counted apart, so this is matched rather than just reported.
+    /// </summary>
+    private const string OverlapSkipReason = "the previous occurrence is still running";
+
+    /// <summary>
+    /// How many occurrences in a row <see cref="OverlapPolicy.Skip"/> passes over before it runs one
+    /// regardless. Bounds how long a single occurrence can hold up a schedule, which is what separates
+    /// "this one is slow" from "this schedule has stopped".
+    ///
+    /// A schedule whose work genuinely overruns its interval this many times over is one whose interval
+    /// is too short for it, and the overlap it then gets is the visible symptom of that.
+    /// </summary>
+    public const int MaxConsecutiveOverlapSkips = 4;
 
     /// <summary>
     /// The first occurrence strictly after <paramref name="now"/>, walking forward from

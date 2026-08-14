@@ -181,8 +181,10 @@ public class WorkflowLifecycleTests : WorkflowActorTestKit
 
         var actor = CreateActor(nameof(GetStatus_ReturnsCurrentEngineLevelStatus_WithoutRequiringACustomCommandHandler), script);
 
+        // Asked before anything has been sent, so this is an entity sharding activated to answer the
+        // question and nothing more.
         actor.Tell(new GetStatus(), TestActor);
-        Assert.Equal(WorkflowStatus.Running, ExpectMsg<WorkflowStatus>());
+        Assert.Equal(WorkflowStatus.NotStarted, ExpectMsg<WorkflowStatusReply>().Status);
 
         actor.Tell(new StartWorkflow(1), TestActor);
         ExpectMsg<string>();
@@ -191,6 +193,6 @@ public class WorkflowLifecycleTests : WorkflowActorTestKit
         ExpectMsg<Sagant.Protocol.Done>();
 
         actor.Tell(new GetStatus(), TestActor);
-        Assert.Equal(WorkflowStatus.Suspended, ExpectMsg<WorkflowStatus>());
+        Assert.Equal(WorkflowStatus.Suspended, ExpectMsg<WorkflowStatusReply>().Status);
     }
 }

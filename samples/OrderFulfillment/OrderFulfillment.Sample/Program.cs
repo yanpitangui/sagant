@@ -267,4 +267,38 @@ _ = Task.Run(async () =>
     }
 });
 
+// The schedule's own account of itself, on a loop. Which of the three numbers moves says where a
+// schedule that looks idle actually is: FireCount climbing means it is placing orders and the
+// question is downstream, SkippedCount climbing means it is passing occurrences over, and neither
+// moving with NextFireUtc in the past means nothing is waking it.
+_ = Task.Run(async () =>
+{
+    var client = app.Services.GetRequiredService<IWorkflowClient>();
+
+    var stopping = app.Lifetime.ApplicationStopping;
+
+    while (!stopping.IsCancellationRequested)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(15), stopping);
+
+            var status = await client.For<ScheduleWorkflow>("standing-order")
+                .Query<GetScheduleStatus, ScheduleStatus>(new GetScheduleStatus(), TimeSpan.FromSeconds(10));
+
+            eventLogger.LogInformation(
+                "standing order schedule: fired {FireCount}, skipped {SkippedCount}, next at {NextFire} (now {Now:HH:mm:ss})",
+                status.FireCount, status.SkippedCount, status.NextFireUtc, DateTimeOffset.UtcNow);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            eventLogger.LogWarning(ex, "reading the standing order schedule's status failed");
+        }
+    }
+});
+
 await app.WaitForShutdownAsync();

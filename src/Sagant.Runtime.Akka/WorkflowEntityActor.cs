@@ -146,8 +146,11 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         // Ledgers are sized here, once, so folding a SeqNrRecorded/IdempotencyRecorded event needs
         // no access to settings — which is what keeps WorkflowEventFold a pure function of state and
         // event, identical live and on recovery.
+        // Seeded as NotStarted, so an entity addressed before anything was written to it says so.
+        // Sharding activates an entity for any message, a status query included, and folding the first
+        // event this instance persists moves it on from here.
         _envelope = new WorkflowRuntimeState<TState>(
-            _workflow.EmptyState(), null, null, 0, WorkflowStatus.Running,
+            _workflow.EmptyState(), null, null, 0, WorkflowStatus.NotStarted,
             HighestAppliedSeqNr: SeqNrLedger.Empty(_settings.SeqNrDedupCapacity),
             IdempotencyLedger: IdempotencyLedger.Empty(_settings.IdempotencyLedgerCapacity));
 
@@ -232,7 +235,7 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
             }
         });
         Command<GetDiagnostics<TState>>(_ => Sender.Tell(new Diagnostics<TState>(_envelope)));
-        Command<GetStatus>(_ => Sender.Tell(_envelope.Status));
+        Command<GetStatus>(_ => Sender.Tell(new WorkflowStatusReply(_envelope.Status)));
         // Reaching this handler means recovery already ran and OnRecoveryCompleted already re-armed
         // every deadline this instance holds, firing any that had elapsed. So the reply is all that
         // is left to do, and it carries the information the sender wants: this instance is up.

@@ -298,7 +298,7 @@ public class WorkflowRefTests : TestKit
         var envelope = shardRegionProbe.ExpectMsg<WorkflowEnvelope>();
         Assert.IsType<GetStatus>(envelope.Message);
         producerAdapterProbe.ExpectNoMsg(TimeSpan.FromMilliseconds(100));
-        shardRegionProbe.LastSender.Tell(WorkflowStatus.Paused, shardRegionProbe.Ref);
+        shardRegionProbe.LastSender.Tell(new WorkflowStatusReply(WorkflowStatus.Paused), shardRegionProbe.Ref);
 
         Assert.Equal(WorkflowStatus.Paused, await task);
     }

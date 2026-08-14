@@ -8,26 +8,36 @@ using Sagant.Idempotency;
 /// </summary>
 public enum WorkflowStatus
 {
+    /// <summary>
+    /// Nothing has run under this id. An instance addressed before anything was written to it reports
+    /// this, so a caller can tell an absent run from a live one.
+    ///
+    /// This is the zero value deliberately: a status that arrives as <c>default</c> — an unset field, a
+    /// value type that was never assigned, an id whose history is gone — says the run is absent, which
+    /// is the answer that keeps a caller waiting on it rather than one that keeps waiting forever.
+    /// </summary>
+    NotStarted = 0,
+
     /// <summary>Executing, or about to.</summary>
-    Running,
+    Running = 1,
 
     /// <summary>Waiting on something outside itself, by its own decision.</summary>
-    Paused,
+    Paused = 2,
 
     /// <summary>Held by an operator. Resumes where it left off.</summary>
-    Suspended,
+    Suspended = 3,
 
     /// <summary>
     /// The run is over. <see cref="WorkflowRuntimeState{TState}.Outcome"/> is non-null exactly when
     /// the status is this, and says how it ended.
     /// </summary>
-    Finished,
+    Finished = 4,
 
     /// <summary>
     /// The instance's persisted data has been purged. Orthogonal to how the run ended: an instance
     /// deleted after finishing still carries its outcome, one deleted mid-run carries none.
     /// </summary>
-    Deleted,
+    Deleted = 5,
 }
 
 /// <summary>

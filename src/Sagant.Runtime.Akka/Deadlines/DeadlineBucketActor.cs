@@ -52,8 +52,8 @@ internal static class BucketCommands
 /// is what keeps the key-to-bucket mapping an in-memory index needs from existing at all.</para>
 ///
 /// <para>The re-arm obligation is met inside the bucket instead: an entry stays until its wake is
-/// answered, retried on a backoff, and the bucket deletes itself once every entry is settled or has
-/// run out of attempts. That bounds a dropped wake to this bucket's lifetime.</para>
+/// answered, retried on a backoff, and the bucket releases what it wrote once every entry is settled
+/// or has run out of attempts. That bounds a dropped wake to this bucket's lifetime.</para>
 /// </summary>
 internal sealed class DeadlineBucketActor : ReceivePersistentActor
 {
@@ -95,12 +95,14 @@ internal sealed class DeadlineBucketActor : ReceivePersistentActor
         Command<Retry>(_ => Fire());
         Command<WakesSettled>(HandleWakesSettled);
         Command<BucketCommands.GetCount>(_ => Sender.Tell(_deadlines.Count));
-        Command<DeleteMessagesSuccess>(_ => Context.Stop(Self));
+        // A drained bucket stays put and goes quiet. ClusterSharding's idle passivation is what reaps
+        // it, on the same handshake it uses for every other entity, so the Shard holds anything still
+        // addressed here and hands it to whatever comes next. A bucket covers a slice rather than one
+        // deadline, and a schedule firing several times a minute re-arms into the slice it just fired
+        // out of — so an arm landing right after a drain is ordinary traffic that has to survive.
+        Command<DeleteMessagesSuccess>(_ => { });
         Command<DeleteMessagesFailure>(msg =>
-        {
-            _log.Warning(msg.Cause, "{0}: draining failed to delete journal messages; stopping anyway", PersistenceId);
-            Context.Stop(Self);
-        });
+            _log.Warning(msg.Cause, "{0}: draining failed to delete journal messages", PersistenceId));
     }
 
     public static Props Props(
@@ -293,6 +295,8 @@ internal sealed class DeadlineBucketActor : ReceivePersistentActor
     /// Records that this bucket is finished, then releases everything it wrote. The record is what
     /// makes recovery after a crash mid-delete land on an empty bucket rather than firing the same
     /// deadlines a second time.
+    ///
+    /// The bucket itself stays, empty and quiet, for idle passivation to reap on the Shard's own terms.
     /// </summary>
     private void Drain() => Persist(Internal(new BucketDrained()), _ =>
     {

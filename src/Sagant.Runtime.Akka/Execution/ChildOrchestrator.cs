@@ -42,7 +42,7 @@ internal sealed class ChildOrchestrator<TState>(WorkflowHandleRegistry registry)
         var envelope = new WorkflowEnvelope(
             relationship.ChildWorkflowId, relationship.Command, ReplyTo: null,
             IdempotencyKey: relationship.RelationshipId, ParentRelationship: relationship);
-        targets.ProducerAdapter.Tell(new WorkflowProducerAdapter.Enqueue(relationship.ChildWorkflowId, envelope));
+        targets.ProducerAdapter.Tell(new WorkflowProducerAdapter.Enqueue(relationship.ChildWorkflowId, envelope), ActorRefs.NoSender);
         unregisteredTypeError = null;
         return true;
     }
@@ -65,7 +65,7 @@ internal sealed class ChildOrchestrator<TState>(WorkflowHandleRegistry registry)
         }
 
         var envelope = new WorkflowEnvelope(relationship.ChildWorkflowId, new Cancel(reason ?? "parent cancelled"));
-        targets.ProducerAdapter.Tell(new WorkflowProducerAdapter.Enqueue(relationship.ChildWorkflowId, envelope));
+        targets.ProducerAdapter.Tell(new WorkflowProducerAdapter.Enqueue(relationship.ChildWorkflowId, envelope), ActorRefs.NoSender);
     }
 
     public void SendTerminate(ChildWorkflowRelationship relationship)
@@ -77,7 +77,7 @@ internal sealed class ChildOrchestrator<TState>(WorkflowHandleRegistry registry)
 
         var envelope = new WorkflowEnvelope(
             relationship.ChildWorkflowId, new Terminate("parent group finalized"));
-        targets.ProducerAdapter.Tell(new WorkflowProducerAdapter.Enqueue(relationship.ChildWorkflowId, envelope));
+        targets.ProducerAdapter.Tell(new WorkflowProducerAdapter.Enqueue(relationship.ChildWorkflowId, envelope), ActorRefs.NoSender);
     }
 
     /// <summary>
@@ -96,7 +96,7 @@ internal sealed class ChildOrchestrator<TState>(WorkflowHandleRegistry registry)
 
         var envelope = new WorkflowEnvelope(
             relationship.ChildWorkflowId, new Delete("parent deleted"));
-        targets.ProducerAdapter.Tell(new WorkflowProducerAdapter.Enqueue(relationship.ChildWorkflowId, envelope));
+        targets.ProducerAdapter.Tell(new WorkflowProducerAdapter.Enqueue(relationship.ChildWorkflowId, envelope), ActorRefs.NoSender);
     }
 
     /// <summary>
@@ -143,7 +143,7 @@ internal sealed class ChildOrchestrator<TState>(WorkflowHandleRegistry registry)
             relationship.RelationshipId, relationship.ChildWorkflowId, relationship.Generation, childStatus,
             childStatus == ChildStatus.Completed ? result : null, failure, traceParent);
         var envelope = new WorkflowEnvelope(relationship.ParentWorkflowId, notification);
-        targets.ProducerAdapter.Tell(new WorkflowProducerAdapter.Enqueue(relationship.ParentWorkflowId, envelope));
+        targets.ProducerAdapter.Tell(new WorkflowProducerAdapter.Enqueue(relationship.ParentWorkflowId, envelope), ActorRefs.NoSender);
     }
 
 }

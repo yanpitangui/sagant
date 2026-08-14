@@ -106,7 +106,7 @@ public sealed class JournalWorkflowVisibilityQuery : IWorkflowVisibilityQuery
     {
         var envelope = new WorkflowRuntimeState<object>(
             UserState: null!, CurrentStepName: null, CurrentStepInput: null,
-            RetryCount: 0, Status: WorkflowStatus.Running);
+            RetryCount: 0, Status: WorkflowStatus.NotStarted);
 
         DateTimeOffset? startedAt = null;
         DateTimeOffset? endedAt = null;

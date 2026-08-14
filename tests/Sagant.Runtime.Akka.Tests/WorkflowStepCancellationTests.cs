@@ -127,7 +127,7 @@ public class WorkflowStepCancellationTests : WorkflowActorTestKit
         // and arming the grace timer — the timer would then get scheduled for a point in virtual
         // time already in the past relative to the (already-advanced) clock, and never fire.
         actor.Tell(new GetStatus(), TestActor);
-        ExpectMsg<WorkflowStatus>();
+        ExpectMsg<WorkflowStatusReply>();
 
         Scheduler.Advance(TimeSpan.FromSeconds(6));
 
@@ -158,7 +158,7 @@ public class WorkflowStepCancellationTests : WorkflowActorTestKit
         // Force a mailbox round-trip before advancing virtual time — see the comment on the same
         // pattern in GracefulShutdown_GraceExpiry_CancelsTheStepsTokenAndStops above.
         actor.Tell(new GetStatus(), TestActor);
-        ExpectMsg<WorkflowStatus>();
+        ExpectMsg<WorkflowStatusReply>();
 
         // Past the ~50s ceiling (60s default handoff-timeout minus 10s headroom) — must have
         // stopped, nowhere close to the requested 999s.

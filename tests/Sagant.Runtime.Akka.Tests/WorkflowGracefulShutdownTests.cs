@@ -90,7 +90,7 @@ public class WorkflowGracefulShutdownTests : WorkflowActorTestKit
         // without this, Advance can race ahead of the actor actually processing GracefulShutdown
         // and arming the grace timer.
         actor.Tell(new GetStatus(), TestActor);
-        ExpectMsg<WorkflowStatus>();
+        ExpectMsg<WorkflowStatusReply>();
 
         Scheduler.Advance(TimeSpan.FromSeconds(6));
 

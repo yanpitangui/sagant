@@ -1,6 +1,7 @@
 using LinqToDB;
 using LinqToDB.Data;
 using LinqToDB.Mapping;
+using Npgsql;
 
 namespace OrderFulfillment.Sample;
 
@@ -192,12 +193,12 @@ public sealed class OrderReadModelRepository(string connectionString)
         // Idempotence is what lets the same line arrive more than once: from several replicas
         // handling one cluster-wide broadcast, and again when a replica replays the recorded event
         // feed on startup.
-        await db.GetTable<EventLogRow>()
+        await EnsuringPresent(() => db.GetTable<EventLogRow>()
             .Merge()
             .Using(new[] { new EventLogRow { WorkflowId = workflowId, At = at, Line = line } })
             .OnTargetKey()
             .InsertWhenNotMatched()
-            .MergeAsync();
+            .MergeAsync());
     }
 
     /// <summary>
@@ -213,7 +214,7 @@ public sealed class OrderReadModelRepository(string connectionString)
     {
         await using var db = Connect();
 
-        await db.GetTable<WorkflowViewRow>()
+        await EnsuringPresent(() => db.GetTable<WorkflowViewRow>()
             .Merge()
             .Using(new[]
             {
@@ -225,9 +226,9 @@ public sealed class OrderReadModelRepository(string connectionString)
             })
             .OnTargetKey()
             .InsertWhenNotMatched()
-            .MergeAsync();
+            .MergeAsync());
 
-        await db.GetTable<OrderRow>()
+        await EnsuringPresent(() => db.GetTable<OrderRow>()
             .Merge()
             .Using(new[]
             {
@@ -239,7 +240,7 @@ public sealed class OrderReadModelRepository(string connectionString)
             })
             .OnTargetKey()
             .InsertWhenNotMatched()
-            .MergeAsync();
+            .MergeAsync());
     }
 
     /// <summary>
@@ -255,7 +256,7 @@ public sealed class OrderReadModelRepository(string connectionString)
     {
         await using var db = Connect();
 
-        await db.GetTable<WorkflowViewRow>()
+        await EnsuringPresent(() => db.GetTable<WorkflowViewRow>()
             .Merge()
             .Using(new[]
             {
@@ -267,14 +268,34 @@ public sealed class OrderReadModelRepository(string connectionString)
             })
             .OnTargetKey()
             .InsertWhenNotMatched()
-            .MergeAsync();
+            .MergeAsync());
 
-        await db.GetTable<OrderItemRow>()
+        await EnsuringPresent(() => db.GetTable<OrderItemRow>()
             .Merge()
             .Using(new[] { new OrderItemRow { OrderId = orderId, ItemWorkflowId = itemWorkflowId, Amount = 0 } })
             .OnTargetKey()
             .InsertWhenNotMatched()
-            .MergeAsync();
+            .MergeAsync());
+    }
+
+    /// <summary>
+    /// Runs a write whose only purpose is that a row ends up present, treating "it is already there"
+    /// as the outcome rather than as a failure.
+    ///
+    /// Every replica watches the same cluster-wide event stream, so all of them react to one event and
+    /// all of them try to register the same row. A merge does not settle that on its own: two of them
+    /// can each find nothing matching and each go on to insert, and the second is told the key is
+    /// taken — which is true, and is what was wanted.
+    /// </summary>
+    private static async Task EnsuringPresent(Func<Task> write)
+    {
+        try
+        {
+            await write();
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+        {
+        }
     }
 
     public async Task RefreshStatus(string workflowId, string status, string? failureReason)
