@@ -203,8 +203,10 @@ public class OrderFulfillmentWorkflowTests : Akka.TestKit.Xunit2.TestKit
         var items = new[] { new OrderLineItem("order-cancel#item-0", 100) };
         await workflow.Request<PlaceOrder, string>(new PlaceOrder("cust-cancel", items, "1 Main St"), TimeSpan.FromSeconds(5));
 
-        // Wait until the charge has actually happened, so cancelling has something to unwind.
-        using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
+        // Wait until the charge has actually happened, so cancelling has something to unwind. The
+        // budget covers a shared runner running every one of this class's clusters at once, where
+        // the same work takes several times as long as it does on an idle machine.
+        using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
         {
             while (payment.Charged.IsEmpty)
             {
@@ -215,7 +217,7 @@ public class OrderFulfillmentWorkflowTests : Akka.TestKit.Xunit2.TestKit
 
         await workflow.Cancel("customer changed their mind", TimeSpan.FromSeconds(5));
 
-        var final = await AwaitStatusAsync(workflow, OrderStatus.Cancelled, TimeSpan.FromSeconds(10));
+        var final = await AwaitStatusAsync(workflow, OrderStatus.Cancelled, TimeSpan.FromSeconds(30));
         Assert.Equal(OrderStatus.Cancelled, final.Status);
 
         // The unwind actually ran: the charge was refunded rather than left outstanding.

@@ -35,7 +35,11 @@
        its own scaffold, and an untagged one fails the run, so nothing joins the docs unchecked. -->
   <ItemGroup>
     <None Include="..\..\README.md" Link="docs\README.md" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\..\docs\*.md" LinkBase="docs" CopyToOutputDirectory="PreserveNewest" />
+    <!-- docs\README.md is the docs index, and the root README already owns the docs\README.md slot
+         in the output — copying it under its own name keeps both files readable here, and keeps
+         which one lands independent of the order MSBuild happens to copy them in. -->
+    <None Include="..\..\docs\README.md" Link="docs\docs-index.md" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\docs\*.md" Exclude="..\..\docs\README.md" LinkBase="docs" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

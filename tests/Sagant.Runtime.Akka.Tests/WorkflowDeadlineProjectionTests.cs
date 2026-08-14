@@ -189,11 +189,16 @@ public class WorkflowDeadlineProjectionTests : TestKit
         // Started only after the write, which is the case a running deployment presents.
         Projection(scheduler, lanes: 4).RunAsync().Wait();
 
-        AwaitAssert(() =>
-        {
-            var arm = Assert.Single(PauseCalls(scheduler, "order-backfill"));
-            Assert.NotNull(arm.Due);
-        }, TimeSpan.FromSeconds(10));
+        // Recording is at-least-once: the live phase resumes at the offset the fold reached, and a
+        // journal whose offset includes that event applies it a second time. An arm carries the
+        // instant it is due, so a repeat records the same instant and the bucket holding it already
+        // treats that as the write it has (see DeadlineBucketActor.HandlePlace). What this asserts is
+        // that the instance was found and every arm for it names a deadline.
+        AwaitAssert(
+            () => Assert.NotEmpty(PauseCalls(scheduler, "order-backfill")),
+            TimeSpan.FromSeconds(10));
+
+        Assert.All(PauseCalls(scheduler, "order-backfill"), c => Assert.NotNull(c.Due));
     }
 
     /// <summary>
