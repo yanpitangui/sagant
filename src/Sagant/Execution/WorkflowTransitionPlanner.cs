@@ -309,7 +309,7 @@ public static class WorkflowTransitionPlanner
         var holdDeadline = HoldDeadlineFor(settings, now);
         var decisions = new List<WorkflowDecision>
         {
-            new WorkflowDecision.RecordStatusChange(WorkflowStatus.Suspended),
+            WorkflowDecision.RecordStatusChange.For(WorkflowStatus.Suspended),
         };
 
         if (holdDeadline is { } deadline)
@@ -339,7 +339,7 @@ public static class WorkflowTransitionPlanner
         var stepTimeout = envelope.CurrentStepName is { } stepName ? settings.StepTimeoutFor(stepName) : null;
         var decisions = new List<WorkflowDecision>
         {
-            new WorkflowDecision.RecordStatusChange(WorkflowStatus.Running),
+            WorkflowDecision.RecordStatusChange.For(WorkflowStatus.Running),
         };
 
         if (envelope.CurrentStepName is not null)
@@ -377,7 +377,7 @@ public static class WorkflowTransitionPlanner
 
         var decisions = new List<WorkflowDecision>
         {
-            new WorkflowDecision.RecordStatusChange(WorkflowStatus.Finished),
+            WorkflowDecision.RecordStatusChange.For(WorkflowStatus.Finished),
             new WorkflowDecision.RecordOutcome(outcome),
         };
         foreach (var child in childrenToClose)
@@ -390,8 +390,8 @@ public static class WorkflowTransitionPlanner
             decisions.Add(new WorkflowDecision.NotifyParent(relationship, outcome));
         }
 
-        decisions.Add(new WorkflowDecision.CancelTimer(WorkflowTimerKind.Workflow));
-        decisions.Add(new WorkflowDecision.CancelTimer(WorkflowTimerKind.Pause));
+        decisions.Add(WorkflowDecision.CancelTimer.For(WorkflowTimerKind.Workflow));
+        decisions.Add(WorkflowDecision.CancelTimer.For(WorkflowTimerKind.Pause));
         decisions.Add(WorkflowDecision.NotifyCompletionWatchers.Instance);
 
         return new ControlPlan<TState>.Apply(events, decisions);
@@ -472,7 +472,7 @@ public static class WorkflowTransitionPlanner
 
         if (next.Status != previous.Status && !beginning)
         {
-            decisions.Add(new WorkflowDecision.RecordStatusChange(next.Status));
+            decisions.Add(WorkflowDecision.RecordStatusChange.For(next.Status));
         }
 
         // Any transition that takes the instance out of Paused reports a resume, not only the
@@ -543,12 +543,12 @@ public static class WorkflowTransitionPlanner
 
         if (next.Status is WorkflowStatus.Finished or WorkflowStatus.Deleted)
         {
-            decisions.Add(new WorkflowDecision.CancelTimer(WorkflowTimerKind.Workflow));
+            decisions.Add(WorkflowDecision.CancelTimer.For(WorkflowTimerKind.Workflow));
         }
 
         decisions.Add(next.Status == WorkflowStatus.Paused && next.PauseDeadline is { } pauseDeadline
             ? new WorkflowDecision.ArmTimer(WorkflowTimerKind.Pause, pauseDeadline)
-            : new WorkflowDecision.CancelTimer(WorkflowTimerKind.Pause));
+            : WorkflowDecision.CancelTimer.For(WorkflowTimerKind.Pause));
 
         // A group's own wait starts when the group opens. Keyed by the group, so a parent awaiting
         // two of them keeps a deadline for each.
@@ -564,7 +564,7 @@ public static class WorkflowTransitionPlanner
         // still carries.
         decisions.Add(next.Status == WorkflowStatus.Suspended && next.HoldDeadline is { } holdDeadline
             ? new WorkflowDecision.ArmTimer(WorkflowTimerKind.Hold, holdDeadline)
-            : new WorkflowDecision.CancelTimer(WorkflowTimerKind.Hold));
+            : WorkflowDecision.CancelTimer.For(WorkflowTimerKind.Hold));
 
         // A parked run releases its watchers too. It has not ended, but nothing it does next will
         // happen without someone acting on the failure first, so a caller waiting on it has nothing

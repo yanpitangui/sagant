@@ -1,6 +1,7 @@
 using Sagant.Protocol;
 using Sagant.Descriptors;
 using Sagant.Runtime.Akka;
+using Sagant.Runtime.Akka.Execution;
 using Akka.Actor;
 using Akka.Cluster.Hosting;
 using Akka.Cluster.Sharding.Delivery;
@@ -140,6 +141,16 @@ public static class WorkflowClusterShardingExtensions
                 // these commands.
                 var consumerSettings = ShardingConsumerController.Settings.Create(system) with { AllowBypass = true };
                 consumerSettings = configureConsumerControllerSettings?.Invoke(consumerSettings) ?? consumerSettings;
+
+                // Settings, tag sets and empty ledgers are the same for every instance this
+                // registration starts, and deriving them is the most expensive thing an activation
+                // does. Resolved once here, from one workflow built for the purpose, and read by
+                // every entity this registration starts — see WorkflowTypeProfile.
+                // The registry is how an entity reaches it: Props.Create hands its constructor
+                // arguments to Activator, which binds to public constructors, so the argument list
+                // carries what the public surface declares and this travels beside it.
+                WorkflowTypeProfileRegistryProvider.Instance.Apply(system)
+                    .Register<TWorkflow, TState>(WorkflowTypeProfile<TState>.For(workflowFactory(), system.Settings.Config));
 
                 return entityId => ShardingConsumerController.Create<WorkflowEnvelope>(
                     consumerController => Props.Create(() => new WorkflowEntityActor<TWorkflow, TState>(

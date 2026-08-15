@@ -84,12 +84,14 @@ public readonly struct StepDescriptor<TState>
             configureActivity?.Invoke(activity);
         }
 
-        var stopwatch = Stopwatch.StartNew();
+        // A timestamp rather than a Stopwatch: every invocation goes through here, and reading the
+        // clock twice answers the same question the object would.
+        var startedAt = Stopwatch.GetTimestamp();
         try
         {
             var result = await _invoke(workflow, new StepContext<TState>(state, attempt, cancellationToken, workflowId), input).ConfigureAwait(false);
             activity?.SetStatus(ActivityStatusCode.Ok);
-            WorkflowDiagnostics.RecordStepDuration(workflow.WorkflowTypeName, Name, attempt, stopwatch.Elapsed, "ok");
+            WorkflowDiagnostics.RecordStepDuration(workflow.WorkflowTypeName, Name, attempt, Stopwatch.GetElapsedTime(startedAt), "ok");
             return result;
         }
         catch (Exception ex)
@@ -97,7 +99,7 @@ public readonly struct StepDescriptor<TState>
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             activity?.AddTag("exception.type", ex.GetType().FullName);
             activity?.AddTag("exception.message", ex.Message);
-            WorkflowDiagnostics.RecordStepDuration(workflow.WorkflowTypeName, Name, attempt, stopwatch.Elapsed, "error");
+            WorkflowDiagnostics.RecordStepDuration(workflow.WorkflowTypeName, Name, attempt, Stopwatch.GetElapsedTime(startedAt), "error");
             throw;
         }
     }

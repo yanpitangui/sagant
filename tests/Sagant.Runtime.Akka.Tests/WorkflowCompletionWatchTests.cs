@@ -1,3 +1,5 @@
+using Akka.Actor;
+using Akka.Event;
 using Sagant.Protocol;
 using Sagant.Effects;
 using Sagant.Runtime.Akka.Tests.Support;
@@ -113,5 +115,50 @@ public class WorkflowCompletionWatchTests : WorkflowActorTestKit
             watcher.ExpectMsg<WorkflowResult<TestState>>(TimeSpan.FromSeconds(5)));
         var terminated = Assert.IsType<WorkflowOutcome.Terminated>(final.Outcome);
         Assert.Equal("operator stopped it", terminated.Reason);
+    }
+
+    /// <summary>
+    /// A caller that stops waiting stops being remembered. A run can go on for days while callers come
+    /// and go — each <c>RunAndAwaitResult</c> that times out leaves a temporary ref behind it — so an
+    /// instance that held every watcher it was ever given would grow for as long as it ran.
+    ///
+    /// The result reaching dead letters is what a held-on-to watcher looks like from outside: the
+    /// instance still sends to a ref whose actor is gone.
+    /// </summary>
+    [Fact]
+    public void WatchForCompletion_WatcherThatStopped_IsNotStillWrittenToWhenTheRunEnds()
+    {
+        var neverCompletes = new TaskCompletionSource<StepEffect<TestState>>();
+        var actor = CreateActor(nameof(WatchForCompletion_WatcherThatStopped_IsNotStillWrittenToWhenTheRunEnds), Script()
+            .Step("Step", (_, _) => neverCompletes.Task)
+            .Command<StartWorkflow>((_, _) => new EffectsBuilder<TestState>().TransitionTo(Step("Step")).ThenReply("accepted")));
+        actor.Tell(new StartWorkflow(1), TestActor);
+        ExpectMsg<string>();
+
+        var deadLetters = CreateTestProbe();
+        Sys.EventStream.Subscribe(deadLetters.Ref, typeof(DeadLetter));
+
+        var abandoned = CreateTestProbe();
+        actor.Tell(new WatchForCompletion<TestState>(), abandoned.Ref);
+
+        // Registration is on the actor's own thread, so the watch is in place before the probe stops.
+        actor.Tell(new GetStatus(), TestActor);
+        ExpectMsg<WorkflowStatusReply>();
+
+        var stillWaiting = CreateTestProbe();
+        actor.Tell(new WatchForCompletion<TestState>(), stillWaiting.Ref);
+
+        Watch(abandoned.Ref);
+        Sys.Stop(abandoned.Ref);
+        ExpectTerminated(abandoned.Ref, TimeSpan.FromSeconds(5));
+
+        neverCompletes.SetResult(
+            new StepEffectsBuilder<TestState>().UpdateState(new TestState { Value = "final" }).ThenComplete());
+
+        // The watcher that stayed is served, which fixes the moment the run ended.
+        var final = stillWaiting.ExpectMsg<WorkflowResult<TestState>>(TimeSpan.FromSeconds(5));
+        Assert.Equal("final", final.State.Value);
+
+        deadLetters.ExpectNoMsg(TimeSpan.FromMilliseconds(500));
     }
 }

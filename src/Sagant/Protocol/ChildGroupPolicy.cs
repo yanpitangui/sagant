@@ -16,37 +16,120 @@ namespace Sagant.Protocol;
 public static class ChildGroupPolicy
 {
     /// <summary>
+    /// How a group's members stand: how many there are, how many have reached a terminal status, and
+    /// how those terminal ones ended. This is everything the rules below read, which is what lets a
+    /// caller answer for a group by counting its members once.
+    /// </summary>
+    /// <param name="Total">Members of the group.</param>
+    /// <param name="Settled">Members that reached a terminal status.</param>
+    /// <param name="Failed">Settled members that failed, were cancelled, or were terminated.</param>
+    /// <param name="Completed">Settled members that completed.</param>
+    public readonly record struct ChildGroupTally(int Total, int Settled, int Failed, int Completed);
+
+    /// <summary>
+    /// Counts one group's members in a single pass, reading <paramref name="reportedStatus"/> for
+    /// <paramref name="reportedRelationshipId"/> — the status the report being applied gives it, ahead
+    /// of that report being folded in.
+    ///
+    /// Takes the whole child list, so a caller holding the list it already has answers for the group
+    /// without building a copy of it. A fan-out reports once per child, and each report asks this
+    /// question, so the copy is the one worth going without.
+    /// </summary>
+    public static ChildGroupTally TallyGroup(
+        IReadOnlyList<ChildWorkflowRelationship> children,
+        string groupId,
+        string reportedRelationshipId,
+        ChildStatus reportedStatus)
+    {
+        var total = 0;
+        var settled = 0;
+        var failed = 0;
+        var completed = 0;
+
+        for (var i = 0; i < children.Count; i++)
+        {
+            var child = children[i];
+            if (child.GroupId != groupId)
+            {
+                continue;
+            }
+
+            total++;
+            var status = child.RelationshipId == reportedRelationshipId ? reportedStatus : child.Status;
+            switch (status)
+            {
+                case ChildStatus.Completed:
+                    completed++;
+                    settled++;
+                    break;
+                case ChildStatus.Failed or ChildStatus.Cancelled or ChildStatus.Terminated:
+                    failed++;
+                    settled++;
+                    break;
+            }
+        }
+
+        return new ChildGroupTally(total, settled, failed, completed);
+    }
+
+    /// <summary>
     /// The group's outcome, or <c>null</c> while it is still unresolved. Holds guarantee H1's half of
     /// the contract: this answers "has the group resolved", and the caller's generation/finalization
     /// guard answers "has it already resumed".
     /// </summary>
-    public static GroupOutcome? EvaluateGroupOutcome(ChildGroupState group, IReadOnlyList<ChildWorkflowRelationship> members)
+    public static GroupOutcome? EvaluateGroupOutcome(ChildGroupState group, ChildGroupTally tally)
     {
-        var anyFailed = members.Any(m => m.Status is ChildStatus.Failed or ChildStatus.Cancelled or ChildStatus.Terminated);
-        if (anyFailed && group.FailurePolicy == FailurePolicy.FailFast)
+        if (tally.Failed > 0 && group.FailurePolicy == FailurePolicy.FailFast)
         {
             return GroupOutcome.Failed;
         }
 
-        var allTerminal = members.All(m => m.Status is ChildStatus.Completed or ChildStatus.Failed or ChildStatus.Cancelled or ChildStatus.Terminated);
-        if (!allTerminal)
+        if (tally.Settled != tally.Total)
         {
             return null;
         }
 
-        if (anyFailed)
+        if (tally.Failed > 0)
         {
             return GroupOutcome.Failed;
         }
 
         return group.CompletionPolicy switch
         {
-            CompletionPolicy.AllSuccessful => members.All(m => m.Status == ChildStatus.Completed)
+            CompletionPolicy.AllSuccessful => tally.Completed == tally.Total
                 ? GroupOutcome.Succeeded
                 : GroupOutcome.Failed,
             CompletionPolicy.AllCompleted => GroupOutcome.Succeeded,
             _ => GroupOutcome.Succeeded,
         };
+    }
+
+    /// <inheritdoc cref="EvaluateGroupOutcome(ChildGroupState, ChildGroupTally)"/>
+    /// <remarks>For a caller holding the group's members as their own list. Counts them and asks the
+    /// same question, so both shapes answer by one rule.</remarks>
+    public static GroupOutcome? EvaluateGroupOutcome(
+        ChildGroupState group, IReadOnlyList<ChildWorkflowRelationship> members)
+    {
+        var settled = 0;
+        var failed = 0;
+        var completed = 0;
+
+        for (var i = 0; i < members.Count; i++)
+        {
+            switch (members[i].Status)
+            {
+                case ChildStatus.Completed:
+                    completed++;
+                    settled++;
+                    break;
+                case ChildStatus.Failed or ChildStatus.Cancelled or ChildStatus.Terminated:
+                    failed++;
+                    settled++;
+                    break;
+            }
+        }
+
+        return EvaluateGroupOutcome(group, new ChildGroupTally(members.Count, settled, failed, completed));
     }
 
     /// <summary>

@@ -65,12 +65,14 @@ public readonly struct QueryDescriptor<TState>
             configureActivity?.Invoke(activity);
         }
 
-        var stopwatch = Stopwatch.StartNew();
+        // A timestamp rather than a Stopwatch: every invocation goes through here, and reading the
+        // clock twice answers the same question the object would.
+        var startedAt = Stopwatch.GetTimestamp();
         try
         {
             var result = await _invoke(workflow, new QueryContext<TState>(state, cancellationToken, workflowId), query).ConfigureAwait(false);
             activity?.SetStatus(ActivityStatusCode.Ok);
-            WorkflowDiagnostics.RecordQueryDuration(workflow.WorkflowTypeName, QueryTypeName, stopwatch.Elapsed, "ok");
+            WorkflowDiagnostics.RecordQueryDuration(workflow.WorkflowTypeName, QueryTypeName, Stopwatch.GetElapsedTime(startedAt), "ok");
             return result;
         }
         catch (Exception ex)
@@ -79,7 +81,7 @@ public readonly struct QueryDescriptor<TState>
             activity?.AddTag("exception.type", ex.GetType().FullName);
             activity?.AddTag("exception.message", ex.Message);
             WorkflowDiagnostics.RecordQueryDuration(
-                workflow.WorkflowTypeName, QueryTypeName, stopwatch.Elapsed,
+                workflow.WorkflowTypeName, QueryTypeName, Stopwatch.GetElapsedTime(startedAt),
                 ex is OperationCanceledException ? "cancelled" : "error");
             throw;
         }

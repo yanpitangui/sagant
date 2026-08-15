@@ -96,6 +96,13 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
     /// See <see cref="EntityKeepAlive"/>.</summary>
     private readonly TimeSpan? _keepAliveInterval;
 
+    /// <summary>
+    /// The address this instance is running at, as every span tags it — or <c>null</c> where the
+    /// deployment runs no cluster. Read once: an <c>ActorSystem</c>'s own address holds still for as
+    /// long as it runs, and formatting it per span builds the same string each time.
+    /// </summary>
+    private readonly string? _nodeAddress;
+
     /// <summary>Set once <see cref="WarnIfDeadlineOutlastsResidency"/> has considered this instance,
     /// so a long-lived one holding several deadlines says it at most once.</summary>
     private bool _deadlineResidencyWarned;
@@ -125,15 +132,23 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
     {
         _persistenceId = persistenceId;
         _entityId = entityId ?? persistenceId;
+        _nodeAddress = Context.System.HasExtension<Cluster>()
+            ? Cluster.Get(Context.System).SelfAddress.ToString()
+            : null;
         _workflow = workflowFactory();
-        _eventTags = WorkflowEventTags.For(_workflow.WorkflowTypeName);
-        _deadlineEventTags = WorkflowEventTags.ForDeadlineEvent(_workflow.WorkflowTypeName);
+        // An entity of a registration reads what WithWorkflow already derived for it; an actor built
+        // directly derives its own, which is what lets a fixture construct several actors of one class
+        // with different settings and have each keep its own. Settings are immutable per registration,
+        // and Settings() is a virtual method a workflow may rebuild on every call, which a transition
+        // reads several times — see WorkflowTypeProfile.
+        var resolved = WorkflowTypeProfileRegistryProvider.Instance.Apply(Context.System)
+            .ResolveOrDerive<TWorkflow, TState>(_workflow, Context.System.Settings.Config);
+        _eventTags = resolved.EventTags;
+        _deadlineEventTags = resolved.DeadlineEventTags;
         _consumerController = consumerController;
         _timeoutScheduler = timeoutScheduler ?? new NativeWorkflowTimeoutScheduler(Context.System.Scheduler);
         _snapshotPolicy = new SnapshotPolicy(snapshotEveryNEvents);
-        // Resolved once: settings are immutable per workflow type, but Settings() is a virtual method
-        // a workflow may rebuild on every call, and a transition reads it several times.
-        _settings = ResolvedWorkflowSettings.From(_workflow.Settings());
+        _settings = resolved.Settings;
         _children = new ChildOrchestrator<TState>(_workflowHandleRegistry);
 
         // Defaults to a thin adapter over the ActorSystem's own scheduler (see
@@ -143,33 +158,24 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         // actor's notion of "now" in lockstep with Scheduler.Advance(), with no separate test-only
         // time seam to wire up.
         _timeProvider = timeProvider ?? new AkkaSchedulerTimeProvider(Context.System.Scheduler);
-        // Ledgers are sized here, once, so folding a SeqNrRecorded/IdempotencyRecorded event needs
-        // no access to settings — which is what keeps WorkflowEventFold a pure function of state and
-        // event, identical live and on recovery.
+        // Ledgers are sized on the profile, once, so folding a SeqNrRecorded/IdempotencyRecorded event
+        // needs no access to settings — which is what keeps WorkflowEventFold a pure function of state
+        // and event, identical live and on recovery. Both are immutable and record by returning a new
+        // one, so every instance of a registration starts from the same empty value.
         // Seeded as NotStarted, so an entity addressed before anything was written to it says so.
         // Sharding activates an entity for any message, a status query included, and folding the first
         // event this instance persists moves it on from here.
         _envelope = new WorkflowRuntimeState<TState>(
             _workflow.EmptyState(), null, null, 0, WorkflowStatus.NotStarted,
-            HighestAppliedSeqNr: SeqNrLedger.Empty(_settings.SeqNrDedupCapacity),
-            IdempotencyLedger: IdempotencyLedger.Empty(_settings.IdempotencyLedgerCapacity));
+            HighestAppliedSeqNr: resolved.EmptySeqNrLedger,
+            IdempotencyLedger: resolved.EmptyIdempotencyLedger);
 
-        // What actually prevents two live copies of this entity existing across a rebalance is
-        // ClusterSharding's own coordinator protocol: the new region can't activate this shard
-        // until the old region confirms it's fully stopped (or Sharding gives up waiting and force-
-        // kills it via akka.cluster.sharding.handoff-timeout — see that key's own doc comment). Our
-        // grace window MUST stay safely under that forced-kill ceiling, or we risk still being
-        // mid-persist when Sharding stops waiting on us and the coordinator proceeds regardless.
-        // So it's derived from the actually configured value (falling back to Akka's own 60s
-        // default when Sharding isn't even loaded, e.g. a unit test instantiating this actor
-        // directly), so it always tracks the real ceiling — a caller-supplied value can only
-        // shorten it, never push it past the ceiling.
-        var handoffTimeout = Context.System.Settings.Config.GetTimeSpan(
-            "akka.cluster.sharding.handoff-timeout", TimeSpan.FromSeconds(60), allowInfinite: false);
-        var safeGraceCeiling = TimeSpan.FromSeconds(Math.Max(5, (handoffTimeout - TimeSpan.FromSeconds(10)).TotalSeconds));
-        _gracefulShutdownGrace = gracefulShutdownGrace is { } requested && requested < safeGraceCeiling
+        // A caller-supplied grace can only shorten the window, never push it past the ceiling the
+        // profile derived from the configured hand-off timeout (see WorkflowTypeProfile.GraceCeiling
+        // for why that ceiling is what it is).
+        _gracefulShutdownGrace = gracefulShutdownGrace is { } requested && requested < resolved.GraceCeiling
             ? requested
-            : safeGraceCeiling;
+            : resolved.GraceCeiling;
 
         _keepAliveInterval = keepAliveInterval is { } interval && interval > TimeSpan.Zero ? interval : null;
 
@@ -248,6 +254,8 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         Command<QueryFailed>(HandleQueryFailed);
         Command<QueryTimedOut>(HandleQueryTimedOut);
         Command<WatchForCompletion<TState>>(_ => HandleWatchForCompletion());
+        // Ahead of CommandAny, so a watcher's death reaches its own handler.
+        Command<Terminated>(HandleWatcherTerminated);
         Command<Suspend>(HandleSuspend);
         Command<Resume>(_ => HandleResume());
         Command<Terminate>(HandleTerminate);
@@ -376,7 +384,7 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
             {
                 activity = a;
                 a?.SetTag("workflow.persistence_id", _persistenceId);
-                a?.SetTag("workflow.node", Context.System.HasExtension<Cluster>() ? Cluster.Get(Context.System).SelfAddress.ToString() : null);
+                a?.SetTag("workflow.node", _nodeAddress);
             });
         // A pure query (no persistence, no transition — e.g. a workflow-author-defined read-only
         // command like a sample's GetOrderState) doesn't become the next span's parent: it's not a
@@ -549,7 +557,7 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
             {
                 activity = a;
                 a?.SetTag("workflow.persistence_id", _persistenceId);
-                a?.SetTag("workflow.node", Context.System.HasExtension<Cluster>() ? Cluster.Get(Context.System).SelfAddress.ToString() : null);
+                a?.SetTag("workflow.node", _nodeAddress);
             });
         // See HandleExternalCommand's matching check — a pure query doesn't advance the trace chain.
         if (!IsNoOpEffect(effect))
@@ -689,7 +697,7 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
             configureActivity: a =>
             {
                 a?.SetTag("workflow.persistence_id", _persistenceId);
-                a?.SetTag("workflow.node", Context.System.HasExtension<Cluster>() ? Cluster.Get(Context.System).SelfAddress.ToString() : null);
+                a?.SetTag("workflow.node", _nodeAddress);
             })
             .PipeTo(Self,
                 success: effect => new QueryCompleted(id, effect),
@@ -1191,6 +1199,14 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         _timeouts.GracefulShutdownDeadline = _timeoutScheduler.ScheduleTimeout(_gracefulShutdownGrace, Self, new GracefulShutdownGraceExpired());
     }
 
+    /// <summary>
+    /// Registers <see cref="Sender"/> to be told how this run ends, or answers straight away where it
+    /// has already ended.
+    ///
+    /// A registered watcher is watched, so one that goes away — a caller whose <c>Ask</c> timed out and
+    /// took its temporary ref with it — is dropped when its <see cref="Terminated"/> arrives. An
+    /// instance that runs for days while callers come and go holds only the ones still waiting.
+    /// </summary>
     private void HandleWatchForCompletion()
     {
         if (CompletionResult() is { } result)
@@ -1200,6 +1216,14 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         }
 
         _pendingCompletionWatchers.Add(Sender);
+        Context.Watch(Sender);
+    }
+
+    /// <summary>A watcher that stopped before this run ended. See <see cref="HandleWatchForCompletion"/>.</summary>
+    private void HandleWatcherTerminated(Terminated terminated)
+    {
+        _pendingCompletionWatchers.RemoveAll(watcher => watcher.Equals(terminated.ActorRef));
+        Context.Unwatch(terminated.ActorRef);
     }
 
     /// <summary>
@@ -1231,6 +1255,7 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         foreach (var watcher in _pendingCompletionWatchers)
         {
             watcher.Tell(result);
+            Context.Unwatch(watcher);
         }
 
         _pendingCompletionWatchers.Clear();
@@ -1314,8 +1339,15 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         // identifiable from an event alone.
         // An event that moves a deadline carries one extra tag, which is what lets a reader follow
         // deadline changes across every instance while reading a small fraction of the journal.
+        var tagged = new Tagged[events.Count];
+        for (var i = 0; i < events.Count; i++)
+        {
+            var e = events[i];
+            tagged[i] = new Tagged(e, WorkflowEventTags.MovesADeadline(e) ? _deadlineEventTags : _eventTags);
+        }
+
         PersistAll(
-            events.Select(e => new Tagged(e, WorkflowEventTags.MovesADeadline(e) ? _deadlineEventTags : _eventTags)),
+            tagged,
             persisted =>
         {
             var @event = (WorkflowEvent)persisted.Payload;
@@ -1526,8 +1558,36 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
             notification.RelationshipId, notification.Status, notification.Result,
             notification.Failure, notification.ResultTraceParent);
 
-        // One pass collects this group's members as they will stand once the report is applied.
-        var groupMembers = new List<ChildWorkflowRelationship>();
+        // One pass counts this group's members as they will stand once the report is applied. A
+        // fan-out asks this once per child, so it reads the list the instance already holds and
+        // allocates nothing; the members themselves are collected below, by the one report that
+        // resolves the group and needs them.
+        var tally = ChildGroupPolicy.TallyGroup(
+            existing, member.GroupId, notification.RelationshipId, notification.Status);
+
+        // The parent's own handler sees this child before its group's policy is consulted, so it can
+        // fold the report into state and — where the report settles the matter on business grounds
+        // the policy cannot express — declare the group over.
+        //
+        // Writing state here is safe because a parent awaiting children runs no step of its own
+        // (ChildrenAwaited clears CurrentStepName), so nothing else is touching state at this
+        // instant; guarantee C2 has nothing to violate.
+        var childResult = InvokeChildResultHandler(member, notification, tally);
+        var outcome = childResult?.StopWaiting ?? ChildGroupPolicy.EvaluateGroupOutcome(group, tally);
+        if (outcome is null)
+        {
+            // The group is still open, so this report is all that happened: one small fact naming
+            // the single member it concerns, which is what keeps a fan-out linear (guarantee H5).
+            PersistEventsThen(
+                WithBookkeeping(seqNrUpdate, WithChildResultState(childResult, memberUpdated)),
+                Array.Empty<WorkflowDecision>(),
+                afterPersist: confirmDelivery);
+            return;
+        }
+
+        // The group is over, so this is the report that needs its members: the resume step is handed
+        // them, and the trace links and any stragglers are read off them.
+        var groupMembers = new List<ChildWorkflowRelationship>(tally.Total);
         for (var i = 0; i < existing.Count; i++)
         {
             if (existing[i].GroupId != member.GroupId)
@@ -1544,26 +1604,6 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
                     ResultTraceParent = notification.ResultTraceParent,
                 }
                 : existing[i]);
-        }
-
-        // The parent's own handler sees this child before its group's policy is consulted, so it can
-        // fold the report into state and — where the report settles the matter on business grounds
-        // the policy cannot express — declare the group over.
-        //
-        // Writing state here is safe because a parent awaiting children runs no step of its own
-        // (ChildrenAwaited clears CurrentStepName), so nothing else is touching state at this
-        // instant; guarantee C2 has nothing to violate.
-        var childResult = InvokeChildResultHandler(member, notification, groupMembers);
-        var outcome = childResult?.StopWaiting ?? ChildGroupPolicy.EvaluateGroupOutcome(group, groupMembers);
-        if (outcome is null)
-        {
-            // The group is still open, so this report is all that happened: one small fact naming
-            // the single member it concerns, which is what keeps a fan-out linear (guarantee H5).
-            PersistEventsThen(
-                WithBookkeeping(seqNrUpdate, WithChildResultState(childResult, memberUpdated)),
-                Array.Empty<WorkflowDecision>(),
-                afterPersist: confirmDelivery);
-            return;
         }
 
         var stragglers = group.RemainingChildrenPolicy == RemainingChildrenPolicy.Terminate
@@ -1606,22 +1646,21 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
     private ChildResultEffect<TState>? InvokeChildResultHandler(
         ChildWorkflowRelationship member,
         ChildLifecycleNotification notification,
-        IReadOnlyList<ChildWorkflowRelationship> groupMembers)
+        ChildGroupPolicy.ChildGroupTally tally)
     {
         if (!((IWorkflowChildResultDispatcher<TState>)_workflow).TryGetChildResultHandler(out var descriptor))
         {
             return null;
         }
 
-        var settled = groupMembers.Count(c => c.Status is not (ChildStatus.Pending or ChildStatus.TerminationRequested));
         return descriptor.Invoke(_workflow, new ChildResultContext<TState>(
             _envelope.UserState,
             member,
             notification.Status,
             notification.Result,
             notification.Failure,
-            settled,
-            groupMembers.Count));
+            tally.Settled,
+            tally.Total));
     }
 
     /// <summary>Prepends the handler's state change, when it made one, so it lands in the same
@@ -1711,7 +1750,7 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
                 a?.SetTag("workflow.persistence_id", _persistenceId);
                 a?.SetTag("workflow.step", stepName);
                 a?.SetTag("workflow.step_attempt", attempt);
-                a?.SetTag("workflow.node", Context.System.HasExtension<Cluster>() ? Cluster.Get(Context.System).SelfAddress.ToString() : null);
+                a?.SetTag("workflow.node", _nodeAddress);
             });
 
         // Deliberately does not update _tracing.LastActivityTraceParent here — see

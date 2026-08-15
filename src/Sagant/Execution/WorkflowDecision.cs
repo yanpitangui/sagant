@@ -47,7 +47,26 @@ public abstract record WorkflowDecision
 
     /// <summary>The instance's status changed; report it. Emitted only for a genuine change, so a
     /// driver does not need to compare against the previous status itself.</summary>
-    public sealed record RecordStatusChange(WorkflowStatus Status) : WorkflowDecision;
+    public sealed record RecordStatusChange(WorkflowStatus Status) : WorkflowDecision
+    {
+        private static readonly RecordStatusChange[] ByStatus =
+        [
+            new(WorkflowStatus.NotStarted),
+            new(WorkflowStatus.Running),
+            new(WorkflowStatus.Paused),
+            new(WorkflowStatus.Suspended),
+            new(WorkflowStatus.Finished),
+            new(WorkflowStatus.Deleted),
+        ];
+
+        /// <summary>
+        /// The decision reporting <paramref name="status"/>, held as one value per status.
+        ///
+        /// A decision carrying only an enum is the same value every time it is made, and a plan makes
+        /// one on most transitions — see <see cref="CancelTimer.For"/>, which shares its reasoning.
+        /// </summary>
+        public static RecordStatusChange For(WorkflowStatus status) => ByStatus[(int)status];
+    }
 
     /// <summary>The run finished; report how. Separate from
     /// <see cref="RecordStatusChange"/> because the useful dimension is the outcome, not the status
@@ -61,11 +80,32 @@ public abstract record WorkflowDecision
     public sealed record ArmTimer(
         WorkflowTimerKind Kind, DateTimeOffset Deadline, string? Discriminator = null) : WorkflowDecision;
 
-    /// <summary>Cancel a live timer whose deadline no longer applies.</summary>
+    /// <summary>Cancel a live timer whose deadline has stopped applying.</summary>
     /// <param name="Discriminator">As <see cref="ArmTimer"/>. <c>null</c> for a kind an instance holds
     /// one of, which cancels that one.</param>
     public sealed record CancelTimer(
-        WorkflowTimerKind Kind, string? Discriminator = null) : WorkflowDecision;
+        WorkflowTimerKind Kind, string? Discriminator = null) : WorkflowDecision
+    {
+        private static readonly CancelTimer[] ByKind =
+        [
+            new(WorkflowTimerKind.Workflow),
+            new(WorkflowTimerKind.Pause),
+            new(WorkflowTimerKind.Hold),
+            new(WorkflowTimerKind.ChildGroup),
+        ];
+
+        /// <summary>
+        /// The decision cancelling the single timer of <paramref name="kind"/> an instance holds, held
+        /// as one value per kind.
+        ///
+        /// Every settled transition emits two of these — the pause timer and the hold timer are
+        /// cancelled whenever the status they belong to is left — so they are the decisions a plan
+        /// makes most often, and each carries an enum and nothing else. A kind an instance holds
+        /// several of names which one through <see cref="CancelTimer(WorkflowTimerKind, string)"/>,
+        /// where the discriminator makes each value its own.
+        /// </summary>
+        public static CancelTimer For(WorkflowTimerKind kind) => ByKind[(int)kind];
+    }
 
     /// <summary>Begin executing <see cref="WorkflowRuntimeState{TState}.CurrentStepName"/>.</summary>
     public sealed record StartStep : WorkflowDecision
