@@ -145,21 +145,27 @@ public static class ChildGroupPolicy
             return (envelope, Array.Empty<ChildWorkflowRelationship>());
         }
 
-        var updated = children.ToList();
+        // The copy is made by the first child that needs marking, so a parent finishing with nothing
+        // left running — every group already resolved, which is the ordinary ending — reads its
+        // children once and allocates the empty result alone.
+        List<ChildWorkflowRelationship>? updated = null;
         var toTerminate = new List<ChildWorkflowRelationship>();
-        for (var i = 0; i < updated.Count; i++)
+        for (var i = 0; i < children.Count; i++)
         {
-            var child = updated[i];
-            if (child.ParentClosePolicy == ParentClosePolicy.Terminate
-                && child.Status is ChildStatus.Pending or ChildStatus.TerminationRequested)
+            var child = children[i];
+            if (child.ParentClosePolicy != ParentClosePolicy.Terminate
+                || child.Status is not (ChildStatus.Pending or ChildStatus.TerminationRequested))
             {
-                var terminationRequested = child with { Status = ChildStatus.TerminationRequested };
-                updated[i] = terminationRequested;
-                toTerminate.Add(terminationRequested);
+                continue;
             }
+
+            updated ??= children.ToList();
+            var terminationRequested = child with { Status = ChildStatus.TerminationRequested };
+            updated[i] = terminationRequested;
+            toTerminate.Add(terminationRequested);
         }
 
-        return toTerminate.Count == 0
+        return updated is null
             ? (envelope, toTerminate)
             : (envelope with { Children = updated }, toTerminate);
     }

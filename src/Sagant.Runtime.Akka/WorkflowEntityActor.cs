@@ -772,6 +772,13 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         _inFlightQueries.Clear();
         _keepAliveTick?.Cancel();
 
+        // The step this instance was last running holds a token source of its own. Starting a step
+        // disposes the one before it, so this is the last one, and cancelling it hands a step still
+        // running off-actor-thread the same signal every other stop gives it.
+        _currentStepCts?.Cancel();
+        _currentStepCts?.Dispose();
+        _currentStepCts = null;
+
         // Passivation stops an entity that may still hold armed deadlines. Each is a persisted
         // absolute instant the next activation arms again, so dropping them here costs nothing and
         // keeps them from firing at an actor that has gone.

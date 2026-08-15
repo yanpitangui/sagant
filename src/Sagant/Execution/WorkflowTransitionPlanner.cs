@@ -470,23 +470,16 @@ public static class WorkflowTransitionPlanner
         var beginning = previous.Status == WorkflowStatus.NotStarted
             && next.Status == WorkflowStatus.Running;
 
+        // This covers every exit from Paused as well, whatever caused it: an ordinary step transition
+        // driven by a business command lands on Running and reports the change from here, the same as
+        // the admin Resume path does.
         if (next.Status != previous.Status && !beginning)
         {
             decisions.Add(WorkflowDecision.RecordStatusChange.For(next.Status));
         }
 
-        // Any transition that takes the instance out of Paused reports a resume, not only the
-        // admin Resume path — the common exit is an ordinary step transition driven by a business
-        // command, which has no case of its own below.
-        if (previous.Status == WorkflowStatus.Paused && next.Status != WorkflowStatus.Paused)
-        {
-        }
-
         switch (transition)
         {
-            case Transition.PauseTransition pt:
-                break;
-
             case Transition.TerminalTransition:
                 decisions.Add(new WorkflowDecision.RecordOutcome(next.Outcome!));
                 foreach (var child in childrenToClose)
