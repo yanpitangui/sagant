@@ -180,6 +180,46 @@ public static class ChildGroupPolicy
     /// straggler in the same group (see <c>RemainingChildrenPolicy.Terminate</c>) is left in place —
     /// it hasn't reached a terminal status yet, even though its group has finalized around it.
     /// </summary>
+    /// <summary>
+    /// Releases what a finalized group's terminal members carry: each one's <c>Result</c>, which is a
+    /// whole child workflow's final state. The relationship stays, with who the child was, how it
+    /// ended and any failure it reported, so diagnostics still show every child a parent ever started.
+    ///
+    /// The result has been read by the time this runs — the resume step is handed the group's members
+    /// as it starts — and the child itself keeps its own state under its own id, so this releases a
+    /// copy rather than the record. The report that delivered it stays in the journal either way, so a
+    /// reader following the event stream sees what each child returned.
+    ///
+    /// What this changes is the slope, not the limit. The relationship stays, so a parent's list still
+    /// grows with the number of children it has ever started; what stops growing is the child state
+    /// each entry carries, which is the larger half of an entry for any child whose state is more than
+    /// a field or two. Bounding the list itself is
+    /// <see cref="Sagant.Settings.WorkflowSettings.PruneFinalizedChildren"/>, which drops the entries
+    /// outright.
+    ///
+    /// A member still <c>Pending</c>/<c>TerminationRequested</c> keeps everything, having yet to
+    /// report anything.
+    /// </summary>
+    public static IReadOnlyList<ChildWorkflowRelationship> ReleaseFinalizedGroupResults(
+        IReadOnlyList<ChildWorkflowRelationship> children, string finalizedGroupId)
+    {
+        List<ChildWorkflowRelationship>? released = null;
+        for (var i = 0; i < children.Count; i++)
+        {
+            var child = children[i];
+            if (child.GroupId != finalizedGroupId || child.Result is null
+                || child.Status is ChildStatus.Pending or ChildStatus.TerminationRequested)
+            {
+                continue;
+            }
+
+            released ??= children.ToList();
+            released[i] = child with { Result = null };
+        }
+
+        return released ?? children;
+    }
+
     public static IReadOnlyList<ChildWorkflowRelationship> PruneFinalizedGroupMembers(
         IReadOnlyList<ChildWorkflowRelationship> children, string finalizedGroupId) =>
         children

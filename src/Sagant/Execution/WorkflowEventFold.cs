@@ -307,9 +307,15 @@ public static class WorkflowEventFold
             children = updated;
         }
 
-        if (children is not null && e.PruneTerminalMembers)
+        if (children is not null)
         {
-            children = ChildGroupPolicy.PruneFinalizedGroupMembers(children, e.GroupId);
+            // A group that has resolved has handed its results to the resume step, so what the parent
+            // carries from here is the record of each child. Pruning drops the terminal members
+            // outright; keeping them releases the child state each one carries — see
+            // ChildGroupPolicy.ReleaseFinalizedGroupResults.
+            children = e.PruneTerminalMembers
+                ? ChildGroupPolicy.PruneFinalizedGroupMembers(children, e.GroupId)
+                : ChildGroupPolicy.ReleaseFinalizedGroupResults(children, e.GroupId);
         }
 
         return envelope with

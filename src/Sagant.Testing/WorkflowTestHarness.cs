@@ -655,7 +655,7 @@ public sealed class WorkflowTestHarness<TWorkflow, TState>
         {
             Children = _settings.PruneFinalizedChildren
                 ? ChildGroupPolicy.PruneFinalizedGroupMembers(children, groupId)
-                : children,
+                : ChildGroupPolicy.ReleaseFinalizedGroupResults(children, groupId),
             ChildGroups = new Dictionary<string, ChildGroupState>(trackedGroups)
             {
                 [groupId] = group with { Generation = group.Generation + 1, Finalized = true },

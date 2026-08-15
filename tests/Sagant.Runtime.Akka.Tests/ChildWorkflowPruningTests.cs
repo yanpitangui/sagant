@@ -97,4 +97,52 @@ public class ChildWorkflowPruningTests : WorkflowActorTestKit
             Assert.Equal(ChildStatus.Pending, remaining.Status);
         }, TimeSpan.FromSeconds(10));
     }
+
+    /// <summary>
+    /// The resume step is handed what each child returned, and the parent releases those results once
+    /// it has. Both halves matter together: releasing them earlier would take the results out of the
+    /// step that exists to read them, and keeping them would leave a parent carrying a copy of every
+    /// child's state for as long as it runs.
+    /// </summary>
+    [Fact]
+    public void AResolvedGroup_HandsItsResultsToTheResumeStep_AndReleasesThemAfterwards()
+    {
+        RegisterScriptableChild();
+
+        object? seenAtResume = null;
+        var script = Script()
+            .Step("StartChildren", (_, _) => Task.FromResult(
+                new StepEffectsBuilder<TestState>().AwaitChildren(
+                    new[] { new StepEffectsBuilder<TestState>().Child<ScriptableWorkflow>("child-1", new StartWorkflow(1)) },
+                    Step<ChildGroupResult>("OnResolved"))))
+            .Step("OnResolved", (_, input) =>
+            {
+                seenAtResume = ((ChildGroupResult)input!).Members[0].Result;
+                return Task.FromResult(new StepEffectsBuilder<TestState>().ThenComplete());
+            })
+            .Command<StartWorkflow>((_, _) => new EffectsBuilder<TestState>().TransitionTo(Step("StartChildren")).ThenReply("accepted"));
+
+        var actor = CreateActor(
+            nameof(AResolvedGroup_HandsItsResultsToTheResumeStep_AndReleasesThemAfterwards), script);
+        actor.Tell(new StartWorkflow(1), TestActor);
+        ExpectMsg<string>();
+
+        NotifyChild(actor, GetChild(actor, "child-1"), ChildStatus.Completed, result: "shipped");
+
+        AwaitAssert(() =>
+        {
+            actor.Tell(new GetDiagnostics<TestState>(), TestActor);
+            var diagnostics = ExpectMsg<Diagnostics<TestState>>();
+            Assert.Equal(WorkflowStatus.Finished, diagnostics.Envelope.Status);
+
+            // The step that exists to read the results got them.
+            Assert.Equal("shipped", seenAtResume);
+
+            // What the parent keeps is the record of the child, without the state it returned.
+            var kept = Assert.Single(diagnostics.Envelope.Children!);
+            Assert.Equal("child-1", kept.ChildWorkflowId);
+            Assert.Equal(ChildStatus.Completed, kept.Status);
+            Assert.Null(kept.Result);
+        }, TimeSpan.FromSeconds(10));
+    }
 }

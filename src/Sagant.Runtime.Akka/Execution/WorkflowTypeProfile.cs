@@ -17,8 +17,8 @@ namespace Sagant.Runtime.Akka.Execution;
 /// It exists because these are expensive to derive and identical across instances.
 /// <see cref="ResolvedWorkflowSettings.From"/> builds two <see cref="System.Collections.Frozen.FrozenDictionary{TKey, TValue}"/>s —
 /// a structure built to be read, at the cost of being slow to construct — and the tag sets are two
-/// immutable sets built from one string. Deriving them per activation costs roughly 2.4 KB and 2 µs
-/// each time an instance comes back, which under idle passivation is often.
+/// immutable sets built from one string. Deriving that per activation is the largest thing an
+/// activation does, and under idle passivation an instance activates whenever it is next addressed.
 ///
 /// A registration is the scope: settings and dispatch tables belong to the workflow
 /// <em>instance</em> a factory produced, and one class can be constructed several times with
