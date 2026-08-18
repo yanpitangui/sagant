@@ -124,6 +124,12 @@ services.AddOpenTelemetry()
 `samples/OrderFulfillment` wires exactly this against an OTLP exporter — run its `AppHost` and watch
 every order's traces live in the Aspire dashboard.
 
+`sagant.step.duration` is recorded while the step's own `Activity` is still current (`StepDescriptor.Invoke`
+records it before disposing the span), so an OTel SDK configured for exemplars attaches the exact
+trace/span id of the attempt behind each histogram measurement automatically — no extra code here,
+just whatever your own OTel setup does to turn exemplars on for its metrics exporter. A spike in
+`sagant.step.duration`'s p99 can jump straight to a sample trace that produced it.
+
 ## The worked example
 
 `samples/OrderFulfillment` is the reference for how a real multi-step workflow with compensation
