@@ -188,19 +188,60 @@ handles out of. That registry is the entire mechanism behind `IWorkflowClient`/
 ## Deployment-level configuration
 
 Cluster/infra decisions, passed to `WithWorkflow` as their own parameters, separate from a
-workflow's own business logic in `WorkflowSettings`:
+workflow's own business logic in `WorkflowSettings` (see
+[workflow-model.md#settings-retries-and-pause](workflow-model.md#settings-retries-and-pause) for
+that side). Full signature:
 
-- `configureShardOptions` — pass-through tuning for `ShardOptions`. Runs after `WithWorkflow` sets
-  its own defaults, so it sees and may override them:
-  - `HandOffStopMessage` is a `GracefulShutdown`, so an in-flight step can finish across a rebalance.
-  - `PassivateIdleEntityAfter` is left at Akka Cluster Sharding's own 120-second stock default.
-    Passivation stops an idle entity actor to free memory, leaving its persisted state untouched and
-    reactivating transparently on the next message — but a live timer belongs to a live entity. A
-    workflow legitimately sits idle while holding a deadline (a pause awaiting approval, a long
-    workflow timeout), and passivating two minutes in loses that live timer; the deadline then only
-    fires when something next activates it (guarantee D8), unless `WithWorkflowDeadlines` is running
-    to bound that lateness (guarantee D8b). Pass `TimeSpan.Zero` here to hold every instance resident
-    until terminal instead, at the memory cost that implies. See `docs/guarantees.md` D8/D8a/D8b.
-- `numberOfShards`, `producerBufferCapacity`, `configureProducerControllerSettings`,
-  `configureConsumerControllerSettings`, `gracefulShutdownGrace`, `timeoutScheduler`, `timeProvider`
-  — see the parameter docs on `WithWorkflow` itself.
+```csharp scaffold=skip reason="the real signature, shown for reference rather than as a call site"
+public static AkkaConfigurationBuilder WithWorkflow<TWorkflow, TState>(
+    this AkkaConfigurationBuilder builder,
+    Func<TWorkflow> workflowFactory,
+    IWorkflowTimeoutScheduler? timeoutScheduler = null,
+    Action<ShardOptions>? configureShardOptions = null,
+    int numberOfShards = 100,
+    TimeSpan? gracefulShutdownGrace = null,
+    TimeProvider? timeProvider = null,
+    int producerBufferCapacity = 1024,
+    Func<ShardingProducerController.Settings, ShardingProducerController.Settings>? configureProducerControllerSettings = null,
+    Func<ShardingConsumerController.Settings, ShardingConsumerController.Settings>? configureConsumerControllerSettings = null,
+    int snapshotEveryNEvents = 10)
+```
+
+| Parameter | Default | What it does |
+|---|---|---|
+| `workflowFactory` | — (required) | Constructs one `TWorkflow` instance, called once per activation. Take dependencies here via closure — `() => new OrderFulfillmentWorkflow(sp.GetRequiredService<IPaymentService>())` — the same instance drives every command/step/query for that entity's lifetime (the workflow itself holds no per-run state, so reusing it is safe — see [workflow-model.md](workflow-model.md#workflowtstate)). |
+| `configureShardOptions` | leaves `WithWorkflow`'s own defaults | Pass-through tuning for `ShardOptions`, run after `WithWorkflow` sets `HandOffStopMessage` (a `GracefulShutdown`, so an in-flight step can finish across a rebalance — see [Graceful shutdown](#graceful-shutdown)) and `PassivateIdleEntityAfter` (`DefaultPassivateIdleEntityAfter`, Akka Cluster Sharding's own 120-second stock default) — the callback sees both and may override either. See [Idle passivation](#idle-passivation) below for the passivation knob specifically. |
+| `numberOfShards` | `100` | How many shards `ClusterSharding` splits this workflow type's instances across — raise it for a fleet expected to run far more than a few hundred concurrent instances per node, so shard rebalancing has finer-grained units to move. |
+| `gracefulShutdownGrace` | derived from `akka.cluster.sharding.handoff-timeout` | How long an in-flight step gets to finish before a rebalance/shutdown force-stops the entity anyway. See [Graceful shutdown](#graceful-shutdown) for the full derivation and its clamp. |
+| `timeProvider` | `AkkaSchedulerTimeProvider` (wraps the `ActorSystem`'s scheduler) | The clock deadline math is computed against — see [Timeouts and retries are persisted absolute deadlines](#timeouts-and-retries-are-persisted-absolute-deadlines). Overriding it is mainly a testing seam (pairing with `Akka.TestKit.TestScheduler` for virtual time), not a production deployment knob. |
+| `timeoutScheduler` | `NativeWorkflowTimeoutScheduler` (wraps `IScheduler.ScheduleTellOnceCancelable`) | What actually arms the live in-process timer for a step/workflow/pause/hold deadline once it's been computed. Overriding it alongside `timeProvider` is the same testing seam — production code has no reason to supply one. |
+| `producerBufferCapacity` | `1024` | Depth of the bounded local queue `WorkflowProducerAdapter` holds pending sends in before handing them to the `ShardingProducerController`. A `Send`/`Request`/`RunAndAwaitResult` call fails fast with `ProducerBufferFullException` once this fills, never blocking the caller. Raise it if a high-throughput caller sees spurious `ProducerBufferFullException`s; lower it on a memory-constrained deployment. |
+| `configureProducerControllerSettings` | none | Pass-through tuning for `ShardingProducerController.Settings` — resend intervals, buffer size, ask timeout. |
+| `configureConsumerControllerSettings` | none | Pass-through tuning for `ShardingConsumerController.Settings` — flow-control window, resend intervals. Runs after `AllowBypass` is forced to `true` internally, so the settings this callback receives already have it set; the callback *can* flip it back to `false`, but doing so silently breaks the `Suspend`/`Resume`/`Terminate`/`GetStatus` path for this workflow type, so there's no reason to. |
+| `snapshotEveryNEvents` | `10` | How often `WorkflowEntityActor` takes a periodic snapshot, counted in persisted events since the last one (see [Events and snapshots](#events-and-snapshots)). A snapshot is always taken once a transition makes the workflow terminal regardless of this value; this only governs cadence while it's still running/paused/suspended. Raise it for a workflow that fans out wide child groups — see guarantee `H5` in `docs/guarantees.md` for the snapshot-volume tradeoff this trades against. |
+
+### Idle passivation
+
+`PassivateIdleEntityAfter` (set through `configureShardOptions`) stops an idle entity actor to free
+memory, leaving its persisted state untouched and reactivating transparently on the next message —
+but a live timer belongs to a live entity. A workflow legitimately sits idle while holding a
+deadline (a pause awaiting approval, a long workflow timeout), and passivating two minutes in (the
+120-second stock default) loses that live timer; the deadline then only fires when something next
+activates it (guarantee D8), unless `WithWorkflowDeadlines` is running to bound that lateness
+(guarantee D8b — see [deadlines-and-scheduling.md](deadlines-and-scheduling.md)). Pass
+`TimeSpan.Zero` here to hold every instance resident until terminal instead, at the memory cost that
+implies. See `docs/guarantees.md` D8/D8a/D8b.
+
+```csharp scaffold=skip reason="a configureShardOptions fragment, shown mid-chain to keep the knob in one line"
+configureShardOptions: options => options.PassivateIdleEntityAfter = TimeSpan.Zero
+```
+
+## Where to go next
+
+- [deadlines-and-scheduling.md](deadlines-and-scheduling.md) — `WithWorkflowDeadlines` (bounding
+  passivation lateness for any workflow) and `WithScheduling`/`ScheduleWorkflow` (recurring
+  cron/interval schedules) — two different extensions, easy to conflate by name alone.
+- [integration-guide.md](integration-guide.md) — wiring this into a real host: DI registration,
+  clustering, observability.
+- [testing.md](testing.md) — exercising a workflow's own logic with `WorkflowTestHarness`, no
+  `ActorSystem` required.

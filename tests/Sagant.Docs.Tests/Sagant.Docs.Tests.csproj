@@ -22,6 +22,10 @@
     <ProjectReference Include="..\..\src\Sagant\Sagant.csproj" />
     <ProjectReference Include="..\..\src\Sagant.Testing\Sagant.Testing.csproj" />
     <ProjectReference Include="..\..\src\Sagant.Runtime.Akka\Sagant.Runtime.Akka.csproj" />
+    <!-- deadlines-and-scheduling.md's snippets name WithScheduling/ScheduleWorkflow directly, so
+         those types have to be in the compile closure the same way every other doc'd type is. -->
+    <ProjectReference Include="..\..\src\Sagant.Scheduling\Sagant.Scheduling.csproj" />
+    <ProjectReference Include="..\..\src\Sagant.Scheduling.Akka\Sagant.Scheduling.Akka.csproj" />
     <!-- Referenced twice for the same reason Sagant.Tests does it: once as an assembly, because the
          snippet compiler drives the generator through CSharpGeneratorDriver, and once as a real
          analyzer so this project's own fixture workflows get generated Steps tables. -->

@@ -206,6 +206,12 @@ A caller waiting on the run is released with `WorkflowResult.Parked` carrying th
 run makes no further progress until someone acts on it. A parked child reports nothing to its
 parent's group, so the group waits with it — which is why parking is chosen per step.
 
+A hold — parked, or an operator's `Suspend` — waits for a person indefinitely by default.
+`WorkflowSettings.HoldTimeout`/`HoldTimeoutStepName` (see
+[workflow-model.md](workflow-model.md#settings-retries-and-pause)) is the opt-in bound: once it
+passes, the named step runs and decides what becomes of a hold nobody came back for, the same shape
+as `PauseSettings.WithTimeout`'s timeout handler.
+
 ## Children
 
 **H1 — A group's resume step runs exactly once.**

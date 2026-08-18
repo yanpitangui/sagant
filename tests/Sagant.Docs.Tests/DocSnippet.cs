@@ -185,6 +185,8 @@ public static class DocSnippetExtractor
         using Sagant.Protocol;
         using Sagant.Runtime.Akka;
         using Sagant.Runtime.Akka.Clustering;
+        using Sagant.Runtime.Akka.Deadlines;
+        using Sagant.Scheduling;
         using Sagant.Settings;
         using Sagant.Testing;
         using Sagant.Docs.Tests.Fixtures;

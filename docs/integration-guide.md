@@ -103,6 +103,11 @@ the alternative that keeps the shorter default and still bounds that lateness (g
 
 See [akka-runtime.md](akka-runtime.md#deployment-level-configuration) for the full parameter list.
 
+Recurring schedules (`WithScheduling`) and the durable-deadline scheduler that bounds passivation
+lateness (`WithWorkflowDeadlines`) are two further extensions, easy to conflate by name — see
+[deadlines-and-scheduling.md](deadlines-and-scheduling.md) for what each actually does and their
+full parameter tables.
+
 ## Observability
 
 Sagant emits standard `System.Diagnostics` `Activity` spans and `Meter` metrics under

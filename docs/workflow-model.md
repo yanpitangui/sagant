@@ -142,17 +142,34 @@ public override WorkflowSettings Settings() => WorkflowSettings.Create()
     .Build();
 ```
 
-- `RecoverStrategy` describes how a step (or the workflow as a whole) recovers from failure: a
-  retry budget (`MaxRetries`), a step to fail over to once that budget is exhausted, and optionally
-  a `BackoffForAttempt` delay function (`Func<int, TimeSpan>` — see `RetryBackoff` for ready-made
-  fixed/exponential implementations). With no backoff configured, a retry starts immediately.
-- `StepTimeout`/`StepRecovery` set per-step overrides; `DefaultStepTimeout`/`DefaultStepRecovery`
-  set the fallback for any step without its own override.
-- `Timeout(...)` sets the workflow-wide deadline — measured against active processing time only
-  (see [Pause](#pause) below for why a paused workflow doesn't count against it).
-- `IdempotencyLedgerCapacity` (default 50) bounds how many caller-supplied idempotency keys an
-  instance remembers for deduping repeat command sends — see
-  [akka-runtime.md](akka-runtime.md#idempotency-and-redelivery).
+`RecoverStrategy` describes how a step (or the workflow as a whole) recovers from failure: a retry
+budget (`MaxRetries`), a step to fail over to once that budget is exhausted, and optionally a
+`BackoffForAttempt` delay function (`Func<int, TimeSpan>` — see `RetryBackoff` for ready-made
+fixed/exponential implementations). With no backoff configured, a retry starts immediately.
+`RecoverStrategy.WithMaxRetries(n).ThenPark()` holds the run at the exhausted step instead of failing
+over — see guarantee `E12` in `docs/guarantees.md`.
+
+Every `WorkflowSettingsBuilder` method, in the rough order a workflow author reaches for them:
+
+| Method | Default if unset | What it configures |
+|---|---|---|
+| `DefaultStepTimeout(timeout)` | no timeout | Fallback timeout for any step without its own `StepTimeout` override. |
+| `DefaultStepRecovery(strategy)` | fails immediately on the first error, no retry | Fallback `RecoverStrategy` for any step without its own `StepRecovery` override. |
+| `StepTimeout(step, timeout)` | inherits `DefaultStepTimeout` | Per-step timeout override, keyed by the generated `Steps` ref. |
+| `StepRecovery(step, strategy)` | inherits `DefaultStepRecovery` | Per-step `RecoverStrategy` override. Calling both this and `StepTimeout` for the same step merges into one entry — order doesn't matter. |
+| `Timeout(timeout)` | no workflow-wide timeout | The workflow-wide deadline, measured against active processing time only (see [Pause](#pause) below for why a paused workflow doesn't count against it). With no failover step, expiry ends the run `TimedOut` (guarantee `E7`). |
+| `Timeout(timeout, failoverStep[, input])` | — | Same deadline, but expiry transitions into `failoverStep` instead of ending the run directly — a chance to compensate before finishing. |
+| `IdempotencyLedgerCapacity(n)` | `50` | How many caller-supplied idempotency keys (the `idempotencyKey` param on `Send`/`Request`/`RunAndAwaitResult`) this instance remembers at once, oldest evicted first — see [akka-runtime.md](akka-runtime.md#akkadelivery-and-idempotency). |
+| `SeqNrDedupCapacity(n)` | `16` | How many transport-level producer incarnations this instance remembers a highest-applied-sequence-number for, oldest evicted first — the internal half of at-least-once delivery dedup, distinct from the caller-facing idempotency ledger above. |
+| `PruneFinalizedChildren(prune = true)` | `false` | Whether a finalized `AwaitChildren` group's terminal-status members are dropped from the runtime's per-instance child history once that group finalizes. Trades away historical detail (queries/diagnostics lose the pruned child's record) for a smaller footprint on a workflow that fans out repeatedly over its lifetime. |
+| `DefaultQueryTimeout(timeout)` | `WorkflowSettings.BuiltInQueryTimeout` (30s) | Fallback bound on how long a `[WorkflowQuery]` handler is allowed to run before the runtime stops waiting, replies with `WorkflowQueryTimeoutException`, and cancels its token. |
+| `QueryTimeout<TQuery>(timeout)` | inherits `DefaultQueryTimeout` | Per-query-type override, keyed by `typeof(TQuery).Name` (the same literal the generator bakes into the query descriptor). |
+| `CancelVia(step)` | no cancellation step — `Cancel` finishes the run immediately, still reporting `Cancelled` | Names the step a `Cancel` command routes to, so the workflow gets a chance to unwind (refund, notify, release a hold) before it finishes — see guarantee `E9`. Two overloads: one taking a `StepRef<TWorkflow, WorkflowCancellation>` (reads the caller's cancellation reason), one taking a plain `StepRef<TWorkflow, NoInput>`. |
+| `HoldTimeout(timeout, step)` | `null` — an operator `Suspend` or a parked step waits for a person indefinitely | How long an instance stays held — by `Suspend`, or by a step that exhausted its retries under `RecoverStrategy.ThenPark()` — before `step` runs and the workflow decides for itself what becomes of a hold nobody came back for. Both the timeout and the step are required together: a deadline with nothing to run would release an instance into no particular step. |
+
+`Timeout`/`HoldTimeout`'s failover/timeout-handler steps are typed `StepRef`s from the generated
+`Steps` class, the same as every other transition target — see
+[The source generator](#the-source-generator) below.
 
 ### Pause
 
