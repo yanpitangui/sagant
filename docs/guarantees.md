@@ -319,7 +319,9 @@ replayable.
 **V6 — Instances are listable without holding an id.**
 `IWorkflowVisibilityQuery` reports status, outcome, current step, attempt and timing for every
 instance, filtered by type, status, start time, or id prefix. Workflow type and entity id both come
-from the persistence id, so narrowing by type reads no event bodies.
+from the persistence id, so narrowing by type reads no event bodies. A child started through
+`AwaitChildren` also reports its parent's id and type, so a listing directly answers "which run does
+this belong to."
 
 **V7 — Delivery bookkeeping stays out of the feed.**
 Records of how a message arrived are transport detail. They persist so deduplication survives a

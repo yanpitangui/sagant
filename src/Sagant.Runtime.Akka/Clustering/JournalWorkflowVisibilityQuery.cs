@@ -148,7 +148,9 @@ public sealed class JournalWorkflowVisibilityQuery : IWorkflowVisibilityQuery
             Attempt: envelope.RetryCount + 1,
             StartedAt: startedAt!.Value,
             EndedAt: endedAt,
-            LastTraceParent: envelope.LastTraceParent);
+            LastTraceParent: envelope.LastTraceParent,
+            ParentWorkflowId: envelope.ParentRelationship?.ParentWorkflowId,
+            ParentWorkflowType: envelope.ParentRelationship?.ParentWorkflowType);
     }
 
     /// <summary>

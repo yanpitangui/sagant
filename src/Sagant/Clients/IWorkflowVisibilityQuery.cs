@@ -13,6 +13,12 @@ namespace Sagant.Clients;
 /// <param name="EndedAt">When it finished, or <c>null</c> while it is still running.</param>
 /// <param name="LastTraceParent">The trace this run last recorded under, so a listing can link
 /// straight into it.</param>
+/// <param name="ParentWorkflowId">The routable id of whichever instance started this one as a child
+/// through <c>AwaitChildren</c> — <c>null</c> for a workflow with no parent, the overwhelmingly common
+/// case. Lets a listing answer "which order does this failed item belong to" directly, from data the
+/// engine already has.</param>
+/// <param name="ParentWorkflowType">The parent's workflow type, alongside <paramref name="ParentWorkflowId"/>
+/// — together enough to resolve it through <see cref="IWorkflowClient.For(string, string)"/>.</param>
 public sealed record WorkflowVisibilityRecord(
     string EntityId,
     string WorkflowType,
@@ -22,7 +28,9 @@ public sealed record WorkflowVisibilityRecord(
     int Attempt,
     DateTimeOffset StartedAt,
     DateTimeOffset? EndedAt,
-    string? LastTraceParent);
+    string? LastTraceParent,
+    string? ParentWorkflowId,
+    string? ParentWorkflowType);
 
 /// <summary>
 /// Which instances a listing should return. Every field narrows the result; leaving one unset leaves

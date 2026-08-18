@@ -1,3 +1,4 @@
+using Akka.Actor;
 using Akka.Persistence.Query;
 using Akka.Persistence.Query.InMemory;
 using Akka.Streams;
@@ -82,6 +83,66 @@ public class JournalVisibilityTests : WorkflowActorTestKit
 
             Assert.Contains(records, r => r.EntityId == "VisibilityPaused");
             Assert.All(records, r => Assert.Equal(WorkflowStatus.Paused, r.Status));
+        }, TimeSpan.FromSeconds(10));
+    }
+
+    /// <summary>Guarantee V6: a child started through <c>AwaitChildren</c> reports its parent's id and
+    /// type in its own listing, so a caller can answer "which run does this belong to" from the
+    /// visibility query alone.</summary>
+    [Fact]
+    public async Task ChildInstance_ReportsItsParentInTheVisibilityRecord()
+    {
+        const string childPersistenceId = nameof(ChildInstance_ReportsItsParentInTheVisibilityRecord) + "Child";
+        const string parentPersistenceId = nameof(ChildInstance_ReportsItsParentInTheVisibilityRecord) + "Parent";
+
+        var childActor = CreateActor(childPersistenceId, Script()
+            .Step("Run", (state, _) => Task.FromResult(new StepEffectsBuilder<TestState>().UpdateState(state).ThenComplete()))
+            .Command<StartWorkflow>((_, _) => new EffectsBuilder<TestState>().TransitionTo(Step("Run")).ThenReply("accepted")));
+
+        var parentScript = Script()
+            .Step("StartChildren", (_, _) => Task.FromResult(new StepEffectsBuilder<TestState>().AwaitChildren(
+                new[] { new StepEffectsBuilder<TestState>().Child<ScriptableWorkflow>(childPersistenceId, new StartWorkflow(1)) },
+                Step<ChildGroupResult>("OnResolved"))))
+            .Command<StartWorkflow>((_, _) => new EffectsBuilder<TestState>().TransitionTo(Step("StartChildren")).ThenReply("accepted"));
+        var parentActor = CreateAltActor(parentPersistenceId, parentScript);
+
+        var childRelay = Sys.ActorOf(Props.Create(() => new RelayProducerAdapter(childActor)));
+        var parentRelay = Sys.ActorOf(Props.Create(() => new RelayProducerAdapter(parentActor)));
+
+        var registry = WorkflowHandleRegistryProvider.Instance.Apply(Sys);
+        registry.Register<ScriptableWorkflow, TestState>(CreateTestProbe().Ref, childRelay);
+        registry.Register<AltScriptableWorkflow, TestState>(CreateTestProbe().Ref, parentRelay);
+
+        parentActor.Tell(new StartWorkflow(1), TestActor);
+        ExpectMsg<string>();
+
+        await AwaitAssertAsync(async () =>
+        {
+            var record = await Visibility.GetAsync(childPersistenceId);
+            Assert.NotNull(record);
+            Assert.Equal(parentPersistenceId, record!.ParentWorkflowId);
+            Assert.Equal(nameof(AltScriptableWorkflow), record.ParentWorkflowType);
+        }, TimeSpan.FromSeconds(10));
+    }
+
+    /// <summary>A workflow with no parent — the overwhelmingly common case — reports both parent
+    /// fields as plain <c>null</c>.</summary>
+    [Fact]
+    public async Task WorkflowWithNoParent_ReportsNoParentFields()
+    {
+        var actor = CreateActor("VisibilityNoParent", Script()
+            .Step("OnlyStep", (_, _) => Task.FromResult(new StepEffectsBuilder<TestState>().ThenComplete()))
+            .Command<StartWorkflow>((_, _) =>
+                new EffectsBuilder<TestState>().TransitionTo(Step("OnlyStep")).ThenReply("accepted")));
+        actor.Tell(new StartWorkflow(1), TestActor);
+        ExpectMsg<string>();
+
+        await AwaitAssertAsync(async () =>
+        {
+            var record = await Visibility.GetAsync("VisibilityNoParent");
+            Assert.NotNull(record);
+            Assert.Null(record!.ParentWorkflowId);
+            Assert.Null(record.ParentWorkflowType);
         }, TimeSpan.FromSeconds(10));
     }
 
