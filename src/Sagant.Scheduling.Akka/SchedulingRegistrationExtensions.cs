@@ -2,6 +2,7 @@ using Akka.Cluster.Hosting;
 using Akka.Hosting;
 using Sagant.Clients;
 using Sagant.Runtime.Akka.Clustering;
+using Sagant.Scheduling.Serialization;
 
 namespace Sagant.Scheduling;
 
@@ -33,10 +34,17 @@ public static class SchedulingRegistrationExtensions
         this AkkaConfigurationBuilder builder,
         IServiceProvider serviceProvider,
         TimeProvider? timeProvider = null,
-        Action<ShardOptions>? configureShardOptions = null) =>
-        builder.WithWorkflow<ScheduleWorkflow, ScheduleState>(
+        Action<ShardOptions>? configureShardOptions = null)
+    {
+        // ScheduleSerializer covers the schedule protocol's own command/query/reply messages — the
+        // same HOCON every time, so repeating it across multiple WithScheduling calls (there is only
+        // ever one) or alongside an application's own WithWorkflow calls is harmless.
+        builder = builder.AddHocon(ScheduleSerializerSetup.Hocon, HoconAddMode.Prepend);
+
+        return builder.WithWorkflow<ScheduleWorkflow, ScheduleState>(
             () => new ScheduleWorkflow(
                 (IWorkflowClient)serviceProvider.GetService(typeof(IWorkflowClient))!,
                 timeProvider ?? TimeProvider.System),
             configureShardOptions: configureShardOptions);
+    }
 }
