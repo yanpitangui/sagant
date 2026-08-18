@@ -102,6 +102,11 @@ public static class WorkflowClusterShardingExtensions
         // across calls on the same ActorSystem is harmless. See WorkflowRuntimeStateSerializer's own
         // doc comment for why this exists.
         builder = builder.AddHocon(WorkflowRuntimeStateSerializerSetup.HoconFor<TState>(), HoconAddMode.Prepend);
+
+        // SagantSerializer covers the engine's own closed types (WorkflowEvent and the rest — see its
+        // own doc comment); the same HOCON regardless of TState, so repeating it across multiple
+        // WithWorkflow calls on one ActorSystem is harmless.
+        builder = builder.AddHocon(SagantSerializerSetup.Hocon, HoconAddMode.Prepend);
         var shardOptions = new ShardOptions
         {
             // Default hand-off-stop message: lets an in-flight step (fire-and-PipeTo, running

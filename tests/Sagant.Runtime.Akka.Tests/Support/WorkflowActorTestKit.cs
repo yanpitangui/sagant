@@ -22,11 +22,12 @@ public abstract class WorkflowActorTestKit : TestKit
     /// <summary>
     /// Every actor this kit creates uses <see cref="TestState"/>, and every one of them is built via
     /// direct <c>Props.Create</c> (see <see cref="CreateActor(string, WorkflowScript, WorkflowSettings, TimeProvider, IActorRef, string, TimeSpan?, int, TimeSpan?)"/>
-    /// below), skipping <c>WithWorkflow</c> — so the serializer binding it would otherwise add gets
-    /// supplied here — see <see cref="WorkflowRuntimeStateSerializerSetup"/>.
+    /// below), skipping <c>WithWorkflow</c> — so the serializer bindings it would otherwise add get
+    /// supplied here — see <see cref="WorkflowRuntimeStateSerializerSetup"/> and
+    /// <see cref="SagantSerializerSetup"/>.
     /// </summary>
     protected WorkflowActorTestKit(string config)
-        : base(WorkflowRuntimeStateSerializerSetup.HoconFor<TestState>() + "\n" + config)
+        : base(WorkflowRuntimeStateSerializerSetup.HoconFor<TestState>() + "\n" + SagantSerializerSetup.Hocon + "\n" + config)
     {
     }
 
