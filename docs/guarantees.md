@@ -263,6 +263,12 @@ continuation of the old one.
 A query, or a command whose effect neither persists nor transitions, never becomes the parent of the
 next real step.
 
+**O3 — Leaving Paused reports how long it waited.**
+The instant an instance enters `Paused` is persisted (`WorkflowRuntimeState.PausedAt`), and whatever
+route leads back out of it — a business-command step transition, a pause timeout, ending, deleting,
+restarting, or an operator `Terminate` — records `sagant.workflow.pause.duration` against that instant
+once, right where it also reports the status change itself.
+
 
 ---
 

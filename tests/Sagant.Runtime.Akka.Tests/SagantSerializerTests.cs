@@ -89,7 +89,7 @@ public class SagantSerializerTests
         yield return [new WorkflowEvent.RunStayed(cause)];
         yield return [new WorkflowEvent.StepStarted("Step", "input", DateTimeOffset.UtcNow, null, cause)];
         yield return [new WorkflowEvent.StepRetryScheduled(1, DateTimeOffset.UtcNow, null, cause)];
-        yield return [new WorkflowEvent.RunPaused("reason", null, null, null, cause)];
+        yield return [new WorkflowEvent.RunPaused("reason", DateTimeOffset.UtcNow, null, null, null, cause)];
         yield return [new WorkflowEvent.RunFinished(WorkflowOutcome.Completed.Instance, null, cause)];
         yield return [new WorkflowEvent.RunDeleted(null, cause)];
         yield return [new WorkflowEvent.RunRestarted("Step", null, "reason", null, null, cause)];

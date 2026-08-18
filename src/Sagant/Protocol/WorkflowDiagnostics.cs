@@ -60,6 +60,9 @@ public static class WorkflowDiagnostics
     private static readonly Counter<long> WorkflowPausedCount = Meter.CreateCounter<long>(
         "sagant.workflow.paused", description: "Workflow instances entering the Paused status.");
 
+    private static readonly Histogram<double> WorkflowPauseDurationSeconds = Meter.CreateHistogram<double>(
+        "sagant.workflow.pause.duration", unit: "s", description: "How long an instance stayed in the Paused status, recorded when it leaves.");
+
     private static readonly Counter<long> WorkflowSuspendedCount = Meter.CreateCounter<long>(
         "sagant.workflow.suspended", description: "Workflow instances entering the Suspended status via an operator Suspend.");
 
@@ -151,4 +154,11 @@ public static class WorkflowDiagnostics
                 break;
         }
     }
+
+    /// <summary>Called by a runtime driver wherever it reports a transition's previous status was
+    /// <see cref="WorkflowStatus.Paused"/> — see <see cref="Execution.WorkflowDecision.RecordPauseDuration"/>
+    /// for every route that covers.</summary>
+    public static void RecordPauseDuration(string workflowType, TimeSpan duration) =>
+        WorkflowPauseDurationSeconds.Record(
+            duration.TotalSeconds, new KeyValuePair<string, object?>("workflow.type", workflowType));
 }

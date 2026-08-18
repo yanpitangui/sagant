@@ -101,6 +101,7 @@ public static class WorkflowTransitionPlanner
             case Transition.PauseTransition pt:
                 events.Add(new WorkflowEvent.RunPaused(
                     pt.Reason,
+                    now,
                     pt.Settings?.Timeout is { } pauseTimeout ? now + pauseTimeout : null,
                     pt.Settings?.TimeoutHandlerStepName,
                     lastTraceParent,
@@ -177,7 +178,7 @@ public static class WorkflowTransitionPlanner
         // recovery use, so the decisions below are built against exactly the state those will see.
         var next = WorkflowEventFold.ApplyAll(envelope, events);
 
-        return new TransitionPlan<TState>(events, BuildDecisions(envelope, next, transition, groupId, childrenToClose));
+        return new TransitionPlan<TState>(events, BuildDecisions(envelope, next, transition, now, groupId, childrenToClose));
     }
 
     /// <summary>
@@ -360,7 +361,7 @@ public static class WorkflowTransitionPlanner
     /// is still live in; an already-finished instance is left alone.
     /// </summary>
     public static ControlPlan<TState> PlanTerminate<TState>(
-        WorkflowRuntimeState<TState> envelope, string? reason, TransitionCause cause)
+        WorkflowRuntimeState<TState> envelope, string? reason, DateTimeOffset now, TransitionCause cause)
     {
         if (envelope.Status is WorkflowStatus.Finished or WorkflowStatus.Deleted)
         {
@@ -382,6 +383,13 @@ public static class WorkflowTransitionPlanner
             WorkflowDecision.RecordStatusChange.For(WorkflowStatus.Finished),
             new WorkflowDecision.RecordOutcome(outcome),
         };
+
+        // The one route out of Paused that never reaches BuildDecisions — a Terminate lands here
+        // directly, so this is the one other place that duration is reported from.
+        if (envelope.Status == WorkflowStatus.Paused && envelope.PausedAt is { } pausedAt)
+        {
+            decisions.Add(new WorkflowDecision.RecordPauseDuration(now - pausedAt));
+        }
         foreach (var child in childrenToClose)
         {
             decisions.Add(new WorkflowDecision.TerminateChild(child));
@@ -460,6 +468,7 @@ public static class WorkflowTransitionPlanner
         WorkflowRuntimeState<TState> previous,
         WorkflowRuntimeState<TState> next,
         Transition transition,
+        DateTimeOffset now,
         string? groupId,
         IReadOnlyList<ChildWorkflowRelationship> childrenToClose)
     {
@@ -478,6 +487,15 @@ public static class WorkflowTransitionPlanner
         if (next.Status != previous.Status && !beginning)
         {
             decisions.Add(WorkflowDecision.RecordStatusChange.For(next.Status));
+
+            // Leaving Paused this way covers every route through Plan() itself — an ordinary
+            // business-command step transition, a pause timeout's step, ending, deleting, restarting.
+            // PlanTerminate is the one route out of Paused that never reaches here (it builds its own
+            // decisions directly) and reports this duration itself.
+            if (previous.Status == WorkflowStatus.Paused && previous.PausedAt is { } pausedAt)
+            {
+                decisions.Add(new WorkflowDecision.RecordPauseDuration(now - pausedAt));
+            }
         }
 
         switch (transition)

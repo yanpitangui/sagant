@@ -392,7 +392,7 @@ public sealed class WorkflowTestHarness<TWorkflow, TState>
     /// <summary>Stops the workflow where it stands, without unwinding — see <see cref="Cancel"/> for
     /// the graceful counterpart.</summary>
     public void Terminate(string? reason = null) =>
-        ApplyControl(WorkflowTransitionPlanner.PlanTerminate(_envelope, reason, new TransitionCause.Control("Terminate")));
+        ApplyControl(WorkflowTransitionPlanner.PlanTerminate(_envelope, reason, _timeProvider.GetUtcNow(), new TransitionCause.Control("Terminate")));
 
     /// <summary>
     /// Asks the workflow to stop and unwind through its configured cancellation step, running that
@@ -433,6 +433,9 @@ public sealed class WorkflowTestHarness<TWorkflow, TState>
             {
                 case WorkflowDecision.RecordStatusChange rsc:
                     WorkflowDiagnostics.RecordStatusChange(Workflow.WorkflowTypeName, rsc.Status);
+                    break;
+                case WorkflowDecision.RecordPauseDuration rpd:
+                    WorkflowDiagnostics.RecordPauseDuration(Workflow.WorkflowTypeName, rpd.Duration);
                     break;
                 case WorkflowDecision.RecordOutcome ro:
                     WorkflowDiagnostics.RecordOutcome(Workflow.WorkflowTypeName, ro.Outcome);
@@ -475,6 +478,9 @@ public sealed class WorkflowTestHarness<TWorkflow, TState>
             {
                 case WorkflowDecision.RecordStatusChange rsc:
                     WorkflowDiagnostics.RecordStatusChange(Workflow.WorkflowTypeName, rsc.Status);
+                    break;
+                case WorkflowDecision.RecordPauseDuration rpd:
+                    WorkflowDiagnostics.RecordPauseDuration(Workflow.WorkflowTypeName, rpd.Duration);
                     break;
                 case WorkflowDecision.RecordOutcome ro:
                     WorkflowDiagnostics.RecordOutcome(Workflow.WorkflowTypeName, ro.Outcome);

@@ -79,6 +79,15 @@ public sealed record WorkflowRuntimeState<TState>(
     DateTimeOffset? PauseDeadline = null,
     string? PauseTimeoutStepName = null,
     /// <summary>
+    /// The absolute instant this instance entered <see cref="WorkflowStatus.Paused"/>, set from
+    /// <see cref="Execution.WorkflowEvent.RunPaused"/>. <c>null</c> whenever the status isn't
+    /// <c>Paused</c> — cleared the moment the instance leaves it, whatever route it takes out (an
+    /// ordinary business-command step transition, a pause timeout, ending, deleting, restarting, or
+    /// an operator <c>Terminate</c>). What <see cref="Execution.WorkflowDecision.RecordPauseDuration"/>
+    /// is measured against.
+    /// </summary>
+    DateTimeOffset? PausedAt = null,
+    /// <summary>
     /// How long this instance stays held before it decides for itself, set when an operator holds it
     /// or a parked failure stops it. Same durability as the deadlines above: an absolute instant,
     /// re-armed on every activation, so a hold outlives a crash and a relocation at its

@@ -464,6 +464,58 @@ public class WorkflowGuaranteeTests
             d => d is WorkflowDecision.RecordStatusChange { Status: WorkflowStatus.Running });
     }
 
+    // ── O3 ───────────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void O3_LeavingAPause_RecordsHowLongItWaited()
+    {
+        var paused = Next(FreshEnvelope(), new Transition.PauseTransition("approval", null), now: Now);
+
+        var resumedAt = Now + TimeSpan.FromMinutes(5);
+        var plan = Plan(paused, new Transition.StepTransition("Charge", null), now: resumedAt);
+
+        var recorded = Assert.Single(plan.AfterPersist.OfType<WorkflowDecision.RecordPauseDuration>());
+        Assert.Equal(TimeSpan.FromMinutes(5), recorded.Duration);
+    }
+
+    /// <summary><see cref="WorkflowTransitionPlanner.PlanTerminate{TState}"/> never reaches
+    /// <c>BuildDecisions</c> — it builds its own decisions directly, so it has to report this
+    /// duration itself.</summary>
+    [Fact]
+    public void O3_TerminatingFromAPause_RecordsHowLongItWaited()
+    {
+        var paused = Next(FreshEnvelope(), new Transition.PauseTransition("approval", null), now: Now);
+
+        var terminatedAt = Now + TimeSpan.FromHours(1);
+        var plan = (ControlPlan<OrderState>.Apply)WorkflowTransitionPlanner.PlanTerminate(
+            paused, "operator stopped it", terminatedAt, TestCause);
+
+        var recorded = Assert.Single(plan.AfterPersist.OfType<WorkflowDecision.RecordPauseDuration>());
+        Assert.Equal(TimeSpan.FromHours(1), recorded.Duration);
+    }
+
+    /// <summary>Entering a pause is not leaving one — the duration is measured on the way out, once
+    /// there is a wait to report.</summary>
+    [Fact]
+    public void O3_EnteringAPause_RecordsNoDuration()
+    {
+        var plan = Plan(FreshEnvelope(), new Transition.PauseTransition("approval", null));
+
+        Assert.Empty(plan.AfterPersist.OfType<WorkflowDecision.RecordPauseDuration>());
+    }
+
+    /// <summary>A transition that never touches Paused has nothing to report — mirrors
+    /// <see cref="StatusChange_IsReportedOnlyWhenTheStatusActuallyMoves"/>.</summary>
+    [Fact]
+    public void O3_TransitionsThatNeverPause_RecordNoDuration()
+    {
+        var running = Next(FreshEnvelope(), new Transition.StepTransition("Charge", null));
+
+        var stillRunning = Plan(running, new Transition.StepTransition("Ship", null));
+
+        Assert.Empty(stillRunning.AfterPersist.OfType<WorkflowDecision.RecordPauseDuration>());
+    }
+
     // ── E1 ───────────────────────────────────────────────────────────────────────────────────────
 
     [Fact]

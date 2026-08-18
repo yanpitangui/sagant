@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
+using Microsoft.Extensions.Time.Testing;
 using Sagant.Descriptors;
 using Sagant.Effects;
 using Sagant.Protocol;
@@ -146,6 +147,8 @@ public class WorkflowDiagnosticsMetricsTests
 
     private sealed record Begin;
 
+    private sealed record Approve;
+
     private sealed class PauseEndWorkflow : Workflow<CounterState>, IWorkflowStepDispatcher<CounterState>, IWorkflowCommandDispatcher<CounterState>, IWorkflowQueryDispatcher<CounterState>, IWorkflowChildResultDispatcher<CounterState>
     {
         public static class Steps
@@ -163,6 +166,7 @@ public class WorkflowDiagnosticsMetricsTests
         private static readonly Dictionary<Type, CommandDescriptor<CounterState>> CommandDescriptors = new()
         {
             [typeof(Begin)] = new(typeof(Begin), nameof(Begin), static (w, ctx, _) => ((PauseEndWorkflow)w).Start()),
+            [typeof(Approve)] = new(typeof(Approve), nameof(Approve), static (w, ctx, _) => ((PauseEndWorkflow)w).ApproveHandler()),
         };
 
         public override CounterState EmptyState() => new(0);
@@ -180,6 +184,10 @@ public class WorkflowDiagnosticsMetricsTests
             CommandDescriptors.TryGetValue(commandType, out descriptor);
 
         public CommandEffect<CounterState> Start() => Effects.TransitionTo(Steps.WaitThenEnd);
+
+        // The business-command route out of Paused — an ordinary step transition, same as an
+        // operator Resume, just driven by a handler instead of a control command.
+        public CommandEffect<CounterState> ApproveHandler() => Effects.TransitionTo(Steps.Finish);
 
         public Task<StepEffect<CounterState>> WaitStep() =>
             Task.FromResult(StepEffects.ThenPause("waiting"));
@@ -211,6 +219,24 @@ public class WorkflowDiagnosticsMetricsTests
 
         Assert.Single(For(measurements, "sagant.workflow.paused"));
         Assert.Empty(For(measurements, "sagant.workflow.resumed"));
+    }
+
+    [Fact]
+    public async Task Harness_LeavingAPauseViaABusinessCommand_RecordsPauseDuration()
+    {
+        var (listener, measurements) = Listen();
+        using var _ = listener;
+
+        var timeProvider = new FakeTimeProvider();
+        var harness = new WorkflowTestHarness<PauseEndWorkflow, CounterState>(new PauseEndWorkflow(), timeProvider: timeProvider);
+        harness.RunCommand(new Begin());
+        await harness.RunStep(PauseEndWorkflow.Steps.WaitThenEnd);
+
+        timeProvider.Advance(TimeSpan.FromMinutes(15));
+        harness.RunCommand(new Approve());
+
+        var m = Assert.Single(For(measurements, "sagant.workflow.pause.duration"));
+        Assert.Equal(TimeSpan.FromMinutes(15).TotalSeconds, (double)m.Value);
     }
 
     [Fact]

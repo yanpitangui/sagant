@@ -91,7 +91,7 @@ public class WorkflowEventFoldTests
             new WorkflowEvent[]
             {
                 new WorkflowEvent.StepStarted("Await", null, null, null, TestCause),
-                new WorkflowEvent.RunPaused("awaiting approval", Now.AddHours(24), "AutoCancel", "trace-3", TestCause),
+                new WorkflowEvent.RunPaused("awaiting approval", Now, Now.AddHours(24), "AutoCancel", "trace-3", TestCause),
                 new WorkflowEvent.StepStarted("Charge", null, Now.AddSeconds(5), null, TestCause),
                 new WorkflowEvent.RunSuspended(TestCause),
                 new WorkflowEvent.RunResumed(Now.AddSeconds(5), TestCause),
@@ -157,6 +157,31 @@ public class WorkflowEventFoldTests
 
         Assert.Equal(WorkflowStatus.Deleted, envelope.Status);
         Assert.IsType<WorkflowOutcome.Completed>(envelope.Outcome);
+    }
+
+    /// <summary>O3: what <c>RecordPauseDuration</c> is measured against — set the instant the run
+    /// pauses.</summary>
+    [Fact]
+    public void RunPaused_SetsPausedAt()
+    {
+        var envelope = WorkflowEventFold.Apply(
+            Fresh(), new WorkflowEvent.RunPaused("waiting", Now, null, null, null, TestCause));
+
+        Assert.Equal(Now, envelope.PausedAt);
+    }
+
+    /// <summary>Left behind on the envelope, <c>PausedAt</c> would misreport a later pause's duration
+    /// as measured from further back than it actually started.</summary>
+    [Fact]
+    public void LeavingAPause_ClearsPausedAt()
+    {
+        var envelope = WorkflowEventFold.ApplyAll(Fresh(), new WorkflowEvent[]
+        {
+            new WorkflowEvent.RunPaused("waiting", Now, null, null, null, TestCause),
+            new WorkflowEvent.StepStarted("Charge", null, null, null, TestCause),
+        });
+
+        Assert.Null(envelope.PausedAt);
     }
 
     /// <summary>A suspend keeps the step name and input, which is the whole reason resume can

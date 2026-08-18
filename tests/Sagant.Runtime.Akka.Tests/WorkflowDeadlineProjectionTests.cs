@@ -110,7 +110,7 @@ public class WorkflowDeadlineProjectionTests : TestKit
         await Projection(scheduler, lanes).RunAsync();
 
         Write("order-ordered",
-            new WorkflowEvent.RunPaused("waiting", DateTimeOffset.UtcNow.AddHours(4), "OnTimeout", null, Cause),
+            new WorkflowEvent.RunPaused("waiting", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(4), "OnTimeout", null, Cause),
             new WorkflowEvent.RunResumed(null, Cause));
 
         // Resuming ends the pause and any hold at once, so the resume contributes two disarms — the
@@ -139,7 +139,7 @@ public class WorkflowDeadlineProjectionTests : TestKit
         foreach (var id in ids)
         {
             Write(id,
-                new WorkflowEvent.RunPaused("waiting", DateTimeOffset.UtcNow.AddHours(4), "OnTimeout", null, Cause),
+                new WorkflowEvent.RunPaused("waiting", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(4), "OnTimeout", null, Cause),
                 new WorkflowEvent.RunResumed(null, Cause));
         }
 
@@ -166,7 +166,7 @@ public class WorkflowDeadlineProjectionTests : TestKit
         await Projection(scheduler, lanes: 4).RunAsync();
 
         Write("order-near",
-            new WorkflowEvent.RunPaused("waiting", DateTimeOffset.UtcNow.AddMilliseconds(200), "OnTimeout", null, Cause));
+            new WorkflowEvent.RunPaused("waiting", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMilliseconds(200), "OnTimeout", null, Cause));
 
         AwaitAssert(
             () => Assert.Contains(scheduler.Calls, c => c.Key.EntityId == "order-near"),
@@ -184,7 +184,7 @@ public class WorkflowDeadlineProjectionTests : TestKit
     {
         var scheduler = new RecordingScheduler();
         Write("order-backfill",
-            new WorkflowEvent.RunPaused("waiting", DateTimeOffset.UtcNow.AddHours(4), "OnTimeout", null, Cause));
+            new WorkflowEvent.RunPaused("waiting", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(4), "OnTimeout", null, Cause));
 
         // Started only after the write, which is the case a running deployment presents.
         await Projection(scheduler, lanes: 4).RunAsync();
@@ -214,7 +214,7 @@ public class WorkflowDeadlineProjectionTests : TestKit
         var scheduler = new RecordingScheduler();
 
         Write("order-done",
-            new WorkflowEvent.RunPaused("waiting", DateTimeOffset.UtcNow.AddHours(4), "OnTimeout", null, Cause),
+            new WorkflowEvent.RunPaused("waiting", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(4), "OnTimeout", null, Cause),
             new WorkflowEvent.RunFinished(WorkflowOutcome.Completed.Instance, null, Cause));
 
         await Projection(scheduler, lanes: 4).RunAsync();
@@ -232,7 +232,7 @@ public class WorkflowDeadlineProjectionTests : TestKit
     {
         var seen = new RecordingScheduler();
         Write("order-early",
-            new WorkflowEvent.RunPaused("waiting", DateTimeOffset.UtcNow.AddHours(4), "OnTimeout", null, Cause));
+            new WorkflowEvent.RunPaused("waiting", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(4), "OnTimeout", null, Cause));
 
         // Reads the history, so this one knows the instance.
         await Projection(seen, lanes: 4).RunAsync();

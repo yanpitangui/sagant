@@ -1045,7 +1045,7 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
     private void ApplyTerminate(Terminate msg, (string ProducerId, long SeqNr)? seqNrUpdate, Action onDone)
     {
         if (WorkflowTransitionPlanner.PlanTerminate(
-                _envelope, msg.Reason, new TransitionCause.Control("Terminate")) is not ControlPlan<TState>.Apply apply)
+                _envelope, msg.Reason, _timeProvider.GetUtcNow(), new TransitionCause.Control("Terminate")) is not ControlPlan<TState>.Apply apply)
         {
             // Already finished: nothing to stop, and the caller still gets its acknowledgement.
             onDone();
@@ -1117,7 +1117,15 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
                 relationship, _envelope.Outcome, _envelope.UserState, _tracing.LastActivityTraceParent ?? _envelope.LastTraceParent);
         }
 
-        _envelope = _envelope with { Status = WorkflowStatus.Deleted, CurrentStepName = null, CurrentStepInput = null };
+        // A third route out of Paused, alongside BuildDecisions and PlanTerminate above: this
+        // command bypasses the planner entirely, so it reports its own duration the same way those
+        // two do.
+        if (_envelope.Status == WorkflowStatus.Paused && _envelope.PausedAt is { } pausedAt)
+        {
+            WorkflowDiagnostics.RecordPauseDuration(_workflow.WorkflowTypeName, _timeProvider.GetUtcNow() - pausedAt);
+        }
+
+        _envelope = _envelope with { Status = WorkflowStatus.Deleted, CurrentStepName = null, CurrentStepInput = null, PausedAt = null };
         WorkflowDiagnostics.RecordStatusChange(_workflow.WorkflowTypeName, WorkflowStatus.Deleted);
         NotifyPendingCompletionWatchersIfTerminal();
 
@@ -1386,6 +1394,9 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
             {
                 case WorkflowDecision.RecordStatusChange rsc:
                     WorkflowDiagnostics.RecordStatusChange(_workflow.WorkflowTypeName, rsc.Status);
+                    break;
+                case WorkflowDecision.RecordPauseDuration rpd:
+                    WorkflowDiagnostics.RecordPauseDuration(_workflow.WorkflowTypeName, rpd.Duration);
                     break;
                 case WorkflowDecision.RecordOutcome ro:
                     WorkflowDiagnostics.RecordOutcome(_workflow.WorkflowTypeName, ro.Outcome);

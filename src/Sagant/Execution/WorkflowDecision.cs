@@ -73,6 +73,12 @@ public abstract record WorkflowDecision
     /// every finished run shares the same status, so that alone says nothing.</summary>
     public sealed record RecordOutcome(WorkflowOutcome Outcome) : WorkflowDecision;
 
+    /// <summary>The instance left <see cref="WorkflowStatus.Paused"/>; report how long it waited.
+    /// Emitted alongside <see cref="RecordStatusChange"/> whenever a transition's previous status was
+    /// <c>Paused</c>, whatever route led out of it — a business-command step transition, a pause
+    /// timeout, ending, deleting, restarting, or an operator <c>Terminate</c>.</summary>
+    public sealed record RecordPauseDuration(TimeSpan Duration) : WorkflowDecision;
+
     /// <summary>Arm a live timer for a deadline the envelope now carries.</summary>
     /// <param name="Discriminator">Which deadline of <paramref name="Kind"/>, for a kind an instance
     /// holds several of. The group id for <see cref="WorkflowTimerKind.ChildGroup"/>, <c>null</c>

@@ -93,14 +93,14 @@ public class WorkflowDeadlineFoldTests
     public void APauseWithNoTimeout_ClearsWhateverAPreviousPauseArmed()
     {
         var armed = WorkflowDeadlineFold.Changes(
-            new WorkflowEvent.RunPaused("waiting", Now.AddHours(4), "OnTimeout", null, TestCause));
+            new WorkflowEvent.RunPaused("waiting", Now, Now.AddHours(4), "OnTimeout", null, TestCause));
         var arm = Assert.IsType<WorkflowDeadlineChange.Arm>(Assert.Single(armed));
         Assert.Equal(WorkflowTimerKind.Pause, arm.Kind);
         Assert.Equal(Now.AddHours(4), arm.DueUtc);
 
         // Pausing also ends any hold, since an instance is in one place and it is now paused.
         var cleared = WorkflowDeadlineFold.Changes(
-            new WorkflowEvent.RunPaused("waiting for a person", null, null, null, TestCause));
+            new WorkflowEvent.RunPaused("waiting for a person", Now, null, null, null, TestCause));
         Assert.All(cleared, c => Assert.IsType<WorkflowDeadlineChange.Disarm>(c));
         Assert.Contains(cleared, c => c is WorkflowDeadlineChange.Disarm { Kind: WorkflowTimerKind.Pause });
         Assert.Contains(cleared, c => c is WorkflowDeadlineChange.Disarm { Kind: WorkflowTimerKind.Hold });
@@ -166,21 +166,21 @@ public class WorkflowDeadlineFoldTests
         {
             new WorkflowEvent.WorkflowDeadlineSet(Now.AddDays(30)),
             new WorkflowEvent.StepStarted("AwaitApproval", null, null, null, TestCause),
-            new WorkflowEvent.RunPaused("awaiting approval", Now.AddDays(7), "OnTimeout", null, TestCause),
+            new WorkflowEvent.RunPaused("awaiting approval", Now, Now.AddDays(7), "OnTimeout", null, TestCause),
             new WorkflowEvent.StepStarted("OnTimeout", null, null, null, TestCause),
             new WorkflowEvent.RunFinished(WorkflowOutcome.Completed.Instance, null, TestCause),
         },
         // Pause, then a command resumes it early.
         new WorkflowEvent[]
         {
-            new WorkflowEvent.RunPaused("awaiting approval", Now.AddDays(7), "OnTimeout", null, TestCause),
+            new WorkflowEvent.RunPaused("awaiting approval", Now, Now.AddDays(7), "OnTimeout", null, TestCause),
             new WorkflowEvent.RunResumed(Now.AddSeconds(30), TestCause),
             new WorkflowEvent.RunFinished(WorkflowOutcome.Completed.Instance, null, TestCause),
         },
         // Pause with no timeout at all, which waits on a command alone.
         new WorkflowEvent[]
         {
-            new WorkflowEvent.RunPaused("awaiting approval", null, null, null, TestCause),
+            new WorkflowEvent.RunPaused("awaiting approval", Now, null, null, null, TestCause),
             new WorkflowEvent.StepStarted("Continue", null, null, null, TestCause),
         },
         // Held, then released, with the workflow deadline running throughout.
@@ -197,16 +197,16 @@ public class WorkflowDeadlineFoldTests
         new WorkflowEvent[]
         {
             new WorkflowEvent.WorkflowDeadlineSet(Now.AddMinutes(30)),
-            new WorkflowEvent.RunPaused("waiting", Now.AddMinutes(10), "OnTimeout", null, TestCause),
+            new WorkflowEvent.RunPaused("waiting", Now, Now.AddMinutes(10), "OnTimeout", null, TestCause),
             new WorkflowEvent.RunRestarted("Begin", null, "next cycle", Now.AddSeconds(5), null, TestCause),
             new WorkflowEvent.WorkflowDeadlineSet(Now.AddMinutes(90)),
-            new WorkflowEvent.RunPaused("waiting", Now.AddMinutes(70), "OnTimeout", null, TestCause),
+            new WorkflowEvent.RunPaused("waiting", Now, Now.AddMinutes(70), "OnTimeout", null, TestCause),
         },
         // Deleted while paused.
         new WorkflowEvent[]
         {
             new WorkflowEvent.WorkflowDeadlineSet(Now.AddMinutes(30)),
-            new WorkflowEvent.RunPaused("waiting", Now.AddMinutes(10), "OnTimeout", null, TestCause),
+            new WorkflowEvent.RunPaused("waiting", Now, Now.AddMinutes(10), "OnTimeout", null, TestCause),
             new WorkflowEvent.RunDeleted(null, TestCause),
         },
         // Held with a deadline, then released by an operator before it lands.
@@ -231,7 +231,7 @@ public class WorkflowDeadlineFoldTests
         // A pause, then an operator holds it before the pause deadline lands.
         new WorkflowEvent[]
         {
-            new WorkflowEvent.RunPaused("awaiting approval", Now.AddDays(7), "OnTimeout", null, TestCause),
+            new WorkflowEvent.RunPaused("awaiting approval", Now, Now.AddDays(7), "OnTimeout", null, TestCause),
             new WorkflowEvent.RunSuspended(TestCause, Now.AddDays(1), "OnAbandoned"),
             new WorkflowEvent.RunResumed(Now.AddSeconds(30), TestCause),
         },

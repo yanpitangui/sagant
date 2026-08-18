@@ -82,9 +82,13 @@ public abstract record WorkflowEvent
 
     /// <summary>The workflow paused, optionally with a deadline and the step to resume through.
     /// <paramref name="Reason"/> is the pausing handler's own words, carried on the event so anything
-    /// reading the event stream can say why the instance is waiting.</summary>
+    /// reading the event stream can say why the instance is waiting. <paramref name="PausedAt"/> is
+    /// the absolute instant this happened, computed at write time the same way every other deadline
+    /// on this event is — it's what <see cref="WorkflowDecision.RecordPauseDuration"/> measures
+    /// against once the instance leaves Paused, however it leaves.</summary>
     public sealed record RunPaused(
         string? Reason,
+        DateTimeOffset PausedAt,
         DateTimeOffset? PauseDeadline,
         string? PauseTimeoutStepName,
         string? TraceParent,

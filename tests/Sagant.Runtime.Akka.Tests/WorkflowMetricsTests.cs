@@ -199,6 +199,30 @@ public class WorkflowMetricsTests : WorkflowActorTestKit, IDisposable
         Assert.Empty(For(persistenceId, "sagant.workflow.resumed"));
     }
 
+    private sealed record Approve;
+
+    [Fact]
+    public void PauseThenBusinessResume_RecordsPauseDuration()
+    {
+        var script = Script()
+            .Step("ReviewOrder", (_, _) => Task.FromResult(new StepEffectsBuilder<TestState>().ThenPause("waiting")))
+            .Step("Finish", (_, _) => Task.FromResult(new StepEffectsBuilder<TestState>().ThenComplete()))
+            .Command<StartWorkflow>((_, _) => new EffectsBuilder<TestState>().TransitionTo(Step("ReviewOrder")).ThenReply("accepted"))
+            .Command<Approve>((_, _) => new EffectsBuilder<TestState>().TransitionTo(Step("Finish")).ThenReply("approved"));
+
+        const string persistenceId = nameof(PauseThenBusinessResume_RecordsPauseDuration);
+        var actor = CreateActor(persistenceId, script, workflowTypeName: persistenceId);
+        actor.Tell(new StartWorkflow(1), TestActor);
+        ExpectMsg<string>();
+
+        AwaitAssert(() => Assert.Single(For(persistenceId, "sagant.workflow.paused")), TimeSpan.FromSeconds(10));
+
+        actor.Tell(new Approve(), TestActor);
+        ExpectMsg<string>();
+
+        AwaitAssert(() => Assert.Single(For(persistenceId, "sagant.workflow.pause.duration")), TimeSpan.FromSeconds(10));
+    }
+
     [Fact]
     public void CompletingRun_RecordsFinishedTaggedCompleted()
     {
