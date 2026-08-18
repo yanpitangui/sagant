@@ -50,10 +50,10 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
     // notification passes UserState through unchanged.
     // ReceivePersistentActor already implements IWithUnboundedStash (via Eventsourced), and Akka
     // wires its Stash property automatically — that's what HandleDelivery and the decision interpreter
-    // use below to defer business commands while a step is in flight. Redeclaring the property here
-    // would shadow the base's own setter (which pairs the injected stash with Eventsourced's private
-    // _internalStash) rather than override it, leaving that pairing unwired — inherited, not
-    // redeclared.
+    // use below to defer business commands while a step is in flight. The property stays inherited
+    // here, left undeclared: the base's own setter is what pairs the injected stash with
+    // Eventsourced's private _internalStash, and redeclaring the property would shadow that setter,
+    // leaving the pairing unwired.
 
     private readonly string _persistenceId;
     private readonly string _entityId;
@@ -121,8 +121,8 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         // (which it constructs as "{typeName}-{entityId}") specifically so ChildOrchestrator can
         // address a ChildLifecycleNotification back to this actor by the id WorkflowMessageExtractor
         // actually understands. Defaults to persistenceId unchanged for a caller that constructs
-        // this actor directly rather than through real ClusterSharding (bare-actor tests, mainly) —
-        // there, the two are already the same value in practice.
+        // this actor directly, outside real ClusterSharding (bare-actor tests, mainly) — there, the
+        // two are already the same value in practice.
         string? entityId = null,
         // How often to announce this entity to its own shard region while it holds work, keeping the
         // shard's idle clock fresh — see EntityKeepAlive. WithWorkflow derives it from the
@@ -246,9 +246,9 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         // every deadline this instance holds, firing any that had elapsed. So the reply is all that
         // is left to do, and it carries the information the sender wants: this instance is up.
         Command<Wake>(_ => Sender.Tell(Done.Instance));
-        // The one query the framework ships (see GetState's own doc comment). Handled here rather
-        // than through the author's own query table, since it is generic across every workflow and
-        // needs no per-workflow handler. UserState is boxed the same way any reply already is.
+        // The one query the framework ships (see GetState's own doc comment). Handled directly here,
+        // outside the author's own query table, since it is generic across every workflow and needs
+        // no per-workflow handler. UserState is boxed the same way any reply already is.
         Command<GetState>(_ => Sender.Tell(_envelope.UserState!));
         Command<QueryCompleted>(HandleQueryCompleted);
         Command<QueryFailed>(HandleQueryFailed);
@@ -341,13 +341,13 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         }
     }
 
-    /// <summary>Local, and never leaves this actor: it prompts the announcement rather than being
-    /// the announcement, which is <see cref="EntityKeepAlive"/>.</summary>
+    /// <summary>Local, and never leaves this actor: it only prompts the announcement itself, which is
+    /// <see cref="EntityKeepAlive"/>.</summary>
     private sealed record KeepAliveTick;
 
     private void HandleExternalCommand(object message)
     {
-        // Queries arrive on this plain path rather than through Akka.Delivery (see
+        // Queries arrive on this plain path, bypassing Akka.Delivery entirely (see
         // WorkflowRef.Query): at-least-once delivery of a read buys nothing, and a query never
         // persists, so there is no seqNr to record and no confirm to send. Matched ahead of the
         // command table — a query is dispatched immediately even while a step is running.
@@ -403,7 +403,7 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         // PauseTransition's WorkflowPaused, ...) — same "cause, then its effects" ordering as
         // everywhere else notifications get published, and the only signal a subscriber gets that a
         // plain step-to-step transition (the common case for e.g. an approval) was driven by a
-        // command at all, not just the engine deciding to move on by itself.
+        // command at all — the engine's own decision to move on by itself has no such signal.
         ApplyCommandEffect(effect, new TransitionCause.Command(message.GetType().Name));
     }
 
@@ -532,9 +532,9 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         }
 
         // A step is running off-actor-thread (fire-and-PipeTo — see StartStep); its own eventual
-        // effect hasn't persisted yet, so this command's state is about to be superseded. Defer it
-        // rather than dispatching against state a step is mid-flight to replace —
-        // a ReleaseDeferredCommands decision unstashes once the step chain settles. Left
+        // effect hasn't persisted yet, so this command's state is about to be superseded. It defers,
+        // stashed until the step chain settles and a ReleaseDeferredCommands decision unstashes it.
+        // Left
         // unconfirmed: Akka.Delivery's producer buffers it until Confirmed, so a crash while this
         // sits in Stash just means the producer redelivers it once this entity (or its next
         // incarnation) recovers — the redelivery/dedup check above already covers that replay.
@@ -641,8 +641,8 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
 
     /// <summary>
     /// <see cref="SendReply"/>'s <c>Akka.Delivery</c> counterpart: the <see cref="Sender"/> on a
-    /// <see cref="ConsumerController.Delivery{T}"/> is the internal <c>ConsumerController</c>, not
-    /// the original caller (see <see cref="WorkflowEnvelope.ReplyTo"/>'s doc comment) — so a
+    /// <see cref="ConsumerController.Delivery{T}"/> is always the internal <c>ConsumerController</c>
+    /// itself (see <see cref="WorkflowEnvelope.ReplyTo"/>'s doc comment) — so a
     /// <c>null</c> <paramref name="replyTo"/> (fire-and-forget <c>Send</c>) falls back to the
     /// still-plain <see cref="SendReply"/>/<see cref="Sender"/> path, so the reply is still
     /// delivered there.
@@ -800,8 +800,8 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         // bookkeeping this handler itself owns (in-flight flag, force-close eligibility) is left.
         _stepInFlight = false;
         // Whatever comes next (the transition below) is caused by THIS attempt succeeding, so it
-        // becomes the new parent — unlike a retry (see HandleStepFailed's willRetry branch), this
-        // step is genuinely concluding, not repeating.
+        // becomes the new parent. This step is genuinely concluding, so it earns that; a retry (see
+        // HandleStepFailed's willRetry branch) only ever stays a sibling of the attempt it followed.
         _tracing.LastActivityTraceParent = _tracing.CurrentStepActivity?.Id ?? _tracing.LastActivityTraceParent;
         _tracing.CurrentStepActivity = null;
         var attempt = _envelope.RetryCount + 1;
@@ -820,9 +820,9 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
             return;
         }
 
-        // Unlike a normal failure, the physical Task is very possibly still running (that's the
-        // whole reason this timer fired) — cancel it so a cooperative step actually stops instead
-        // of continuing to run orphaned past its own deadline.
+        // A normal failure means the Task already settled; here it is very possibly still running
+        // (that's the whole reason this timer fired) — cancel it so a cooperative step actually
+        // stops here, before it runs on orphaned past its own deadline.
         _currentStepCts?.Cancel();
         HandleStepFailed(new StepFailed(msg.StepName, msg.Epoch, new TimeoutException($"Step '{msg.StepName}' timed out")));
     }
@@ -878,8 +878,8 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
                 }
 
                 // The envelope carries RetryDelayUntil as an absolute deadline, so a crash or
-                // rebalance mid-wait resumes exactly the remaining delay on reactivation
-                // (OnRecoveryCompleted) rather than restarting it.
+                // rebalance mid-wait resumes on reactivation (OnRecoveryCompleted) at exactly the
+                // delay's remaining length.
                 _timeouts.CancelRetryDelay();
                 _timeouts.RetryDelay = _timeoutScheduler.ScheduleTimeout(
                     retryDelayUntil - now, Self, new RetryDue(msg.StepName, _stepEpoch));
@@ -887,9 +887,9 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
             return;
         }
 
-        // The budget is exhausted, so this step is genuinely concluding rather than repeating —
-        // whatever comes next is caused by this specific failed attempt and parents off it, the same
-        // reasoning as the success path in HandleStepCompleted.
+        // The budget is exhausted, so this step is genuinely concluding here — whatever comes next is
+        // caused by this specific failed attempt and parents off it, the same reasoning as the
+        // success path in HandleStepCompleted.
         _tracing.LastActivityTraceParent = failedActivityId ?? _tracing.LastActivityTraceParent;
         PersistEnvelopeThen(
             PersistenceEffect<TState>.NoPersistence.Instance,
@@ -1003,8 +1003,9 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
     ///
     /// Whatever step was running is invalidated first, exactly as <c>Suspend</c> and
     /// <c>Terminate</c> do: its eventual result is discarded by the epoch check and its token is
-    /// cancelled so a cooperative step stops before the compensation starts. Replies as soon as the decision is durable, not once compensation finishes — a caller
-    /// wanting to wait for the unwind watches for completion instead.
+    /// cancelled so a cooperative step stops before the compensation starts. The reply goes out as
+    /// soon as the decision is durable — the compensation itself is still running at that point, so a
+    /// caller wanting to observe the unwind finishing watches for completion separately.
     /// </summary>
     private void HandleCancel(Cancel msg)
     {
@@ -1340,10 +1341,10 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
 
         // Tagged is the journal's own wrapper: it strips the tags on the way in and hands recovery
         // back the plain event, so this actor's Recover<WorkflowEvent> and the fold are untouched.
-        // Tagging here rather than through an IEventAdapter keeps it independent of which journal
-        // plugin an application configures, and lets the per-type tag exist at all — an adapter is
-        // registered per journal, where several workflow types share one and none of them is
-        // identifiable from an event alone.
+        // Tagging happens here, at the write site, so it stays independent of which journal plugin an
+        // application configures. An IEventAdapter is registered per journal, where several workflow
+        // types share one and none of them is identifiable from an event alone — the per-type tag
+        // needs this actor's own knowledge of which workflow it is.
         // An event that moves a deadline carries one extra tag, which is what lets a reader follow
         // deadline changes across every instance while reading a small fraction of the journal.
         var tagged = new Tagged[events.Count];
@@ -1447,9 +1448,9 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
                     break;
                 case WorkflowDecision.ReclaimHistory:
                     // Snapshot the fresh envelope, then release everything below it once that
-                    // snapshot is durable (see HandleSnapshotSuccess). Taking it unconditionally
-                    // rather than through the periodic policy is what makes the release safe: the
-                    // events being dropped are the only other record of this state.
+                    // snapshot is durable (see HandleSnapshotSuccess). Taken unconditionally, on the
+                    // spot, is what makes the release safe: the events being dropped are the only
+                    // other record of this state, so nothing may skip taking it here.
                     _reclaimingHistory = true;
                     SaveSnapshot(_envelope);
                     break;
@@ -1515,15 +1516,20 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
     /// recovered actor cannot resume twice or forget that it requested straggler termination.
     /// </summary>
     /// <summary>Index of the relationship with this id, or <c>-1</c>. A linear scan over a list the
-    /// caller already holds, so an unknown id costs one pass and nothing else.</summary>
+    /// caller already holds, so an unknown id costs one pass and nothing else — a foreach, so that
+    /// pass stays one pass for whatever collection backs <c>children</c> (see
+    /// <c>WorkflowEventFold.Concat</c>).</summary>
     private static int IndexOfRelationship(IReadOnlyList<ChildWorkflowRelationship> children, string relationshipId)
     {
-        for (var i = 0; i < children.Count; i++)
+        var index = 0;
+        foreach (var child in children)
         {
-            if (children[i].RelationshipId == relationshipId)
+            if (child.RelationshipId == relationshipId)
             {
-                return i;
+                return index;
             }
+
+            index++;
         }
 
         return -1;
@@ -1595,22 +1601,23 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         // The group is over, so this is the report that needs its members: the resume step is handed
         // them, and the trace links and any stragglers are read off them.
         var groupMembers = new List<ChildWorkflowRelationship>(tally.Total);
-        for (var i = 0; i < existing.Count; i++)
+        var position = 0;
+        foreach (var child in existing)
         {
-            if (existing[i].GroupId != member.GroupId)
+            if (child.GroupId == member.GroupId)
             {
-                continue;
+                groupMembers.Add(position == index
+                    ? child with
+                    {
+                        Status = notification.Status,
+                        Result = notification.Result,
+                        Failure = notification.Failure,
+                        ResultTraceParent = notification.ResultTraceParent,
+                    }
+                    : child);
             }
 
-            groupMembers.Add(i == index
-                ? existing[i] with
-                {
-                    Status = notification.Status,
-                    Result = notification.Result,
-                    Failure = notification.Failure,
-                    ResultTraceParent = notification.ResultTraceParent,
-                }
-                : existing[i]);
+            position++;
         }
 
         var stragglers = group.RemainingChildrenPolicy == RemainingChildrenPolicy.Terminate
@@ -1694,8 +1701,8 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
     /// </summary>
     private void PublishPersisted(WorkflowEvent persisted)
     {
-        // Delivery bookkeeping records how a message arrived, which is transport detail rather than
-        // something that happened to the workflow. The journal keeps it so dedup survives a crash;
+        // Delivery bookkeeping records how a message arrived — transport detail, distinct from
+        // anything that happened to the workflow. The journal keeps it so dedup survives a crash;
         // a subscriber watching the run has no use for it, so the feed leaves it out. Any reader of
         // the stored events applies this same skip, which is what keeps both transports carrying the
         // same sequence.
@@ -1784,9 +1791,10 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
     /// Says so, once per instance, when this instance is about to wait longer than it will stay
     /// resident and nothing is watching its deadline for it.
     ///
-    /// Both conditions have to hold for lateness to be possible, which is why the check sits here
-    /// rather than at registration: an instance that passivates fires its deadline whenever something
-    /// next activates it (guarantee <c>D8</c>), and a deadline scheduler is what bounds that
+    /// Both conditions have to hold for lateness to be possible, and both are settled by the moment
+    /// this runs, which is why the check sits here and not at registration: an instance that
+    /// passivates fires its deadline whenever something next activates it (guarantee <c>D8</c>), and
+    /// a deadline scheduler is what bounds that
     /// (<c>D8b</c>). A deployment whose deadlines all land inside the passivation window needs
     /// neither, and hears nothing.
     ///
@@ -1858,10 +1866,10 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         if (_reclaimingHistory)
         {
             _reclaimingHistory = false;
-            // This snapshot holds the fresh cycle's envelope in full, so everything at or below it is
-            // now redundant. Releasing it here rather than at the restart itself is what keeps the
-            // restart durable: a crash in between replays the old events plus RunRestarted and folds
-            // to this same envelope.
+            // This snapshot holds the fresh cycle's envelope in full, so everything at or below it has
+            // become redundant. The release waits for right here, after the snapshot lands, which is
+            // what keeps the restart durable: a crash in between replays the old events plus
+            // RunRestarted and folds to this same envelope.
             DeleteMessages(msg.Metadata.SequenceNr);
         }
 
@@ -1870,9 +1878,9 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         // sequence number, a surprising interpretation of 0 as a bound. Calling
         // DeleteSnapshots after the very first-ever snapshot would wipe every snapshot for this
         // persistenceId, including ones written after this delete was issued but before it
-        // completed: total data loss, not a theoretical edge case. There's nothing older to prune
-        // after the first snapshot anyway, so skipping is correct regardless of the exact store
-        // semantics, not just a workaround for them.
+        // completed: real, total data loss, reachable in ordinary operation. There's nothing older to
+        // prune after the first snapshot anyway, so skipping is correct on its own terms, whatever the
+        // exact store semantics turn out to be.
         if (msg.Metadata.SequenceNr > 1)
         {
             DeleteSnapshots(new SnapshotSelectionCriteria(maxSequenceNr: msg.Metadata.SequenceNr - 1));

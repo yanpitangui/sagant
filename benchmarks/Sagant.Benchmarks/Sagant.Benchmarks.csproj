@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- A console app measuring the CLR's own allocator and JIT — this stays out of every pack step
+         the release flow runs, the same as every test project already does. -->
+    <IsPackable>false</IsPackable>
+    <Description>
+      Reproducible benchmarks for the allocation/CPU claims made about Sagant's runtime, so a claim in
+      a commit message or in docs/guarantees.md stays checkable, run again on demand. Run explicitly
+      via `dotnet run -c Release` from this directory.
+    </Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Sagant\Sagant.csproj" />
+  </ItemGroup>
+
+</Project>

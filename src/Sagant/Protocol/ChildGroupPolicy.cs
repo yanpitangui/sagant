@@ -1,11 +1,12 @@
+using System.Collections.Immutable;
 using Sagant.Effects;
 
 namespace Sagant.Protocol;
 
 /// <summary>
 /// The child-group rules, as pure functions over persisted state. They live in core because
-/// every driver has to make exactly these decisions and they are the definition of what a group
-/// means — not an implementation detail of how one driver happens to store it.
+/// every driver has to make exactly these decisions, and they are the definition of what a group
+/// means, independent of how any one driver happens to store it.
 ///
 /// Nothing here schedules, sends or persists. A caller decides a group's outcome with
 /// <see cref="EvaluateGroupOutcome"/>, computes the terminal-parent envelope with
@@ -46,9 +47,10 @@ public static class ChildGroupPolicy
         var failed = 0;
         var completed = 0;
 
-        for (var i = 0; i < children.Count; i++)
+        // A plain foreach: children may be an ImmutableList (see WorkflowEventFold.Concat), whose own
+        // enumerator visits every member once in a single pass. This stays that one pass regardless.
+        foreach (var child in children)
         {
-            var child = children[i];
             if (child.GroupId != groupId)
             {
                 continue;
@@ -114,9 +116,9 @@ public static class ChildGroupPolicy
         var failed = 0;
         var completed = 0;
 
-        for (var i = 0; i < members.Count; i++)
+        foreach (var member in members)
         {
-            switch (members[i].Status)
+            switch (member.Status)
             {
                 case ChildStatus.Completed:
                     completed++;
@@ -147,27 +149,30 @@ public static class ChildGroupPolicy
 
         // The copy is made by the first child that needs marking, so a parent finishing with nothing
         // left running — every group already resolved, which is the ordinary ending — reads its
-        // children once and allocates the empty result alone.
+        // children once and allocates the empty result alone. A plain foreach keeps that one read a
+        // single pass for whatever collection backs Children.
         List<ChildWorkflowRelationship>? updated = null;
         var toTerminate = new List<ChildWorkflowRelationship>();
-        for (var i = 0; i < children.Count; i++)
+        var index = 0;
+        foreach (var child in children)
         {
-            var child = children[i];
             if (child.ParentClosePolicy != ParentClosePolicy.Terminate
                 || child.Status is not (ChildStatus.Pending or ChildStatus.TerminationRequested))
             {
+                index++;
                 continue;
             }
 
             updated ??= children.ToList();
             var terminationRequested = child with { Status = ChildStatus.TerminationRequested };
-            updated[i] = terminationRequested;
+            updated[index] = terminationRequested;
             toTerminate.Add(terminationRequested);
+            index++;
         }
 
         return updated is null
             ? (envelope, toTerminate)
-            : (envelope with { Children = updated }, toTerminate);
+            : (envelope with { Children = updated.ToImmutableList() }, toTerminate);
     }
 
     /// <summary>
@@ -186,16 +191,16 @@ public static class ChildGroupPolicy
     /// ended and any failure it reported, so diagnostics still show every child a parent ever started.
     ///
     /// The result has been read by the time this runs — the resume step is handed the group's members
-    /// as it starts — and the child itself keeps its own state under its own id, so this releases a
-    /// copy rather than the record. The report that delivered it stays in the journal either way, so a
-    /// reader following the event stream sees what each child returned.
+    /// as it starts — and the child itself keeps its own state under its own id, so what this releases
+    /// is a copy that has already served its purpose. The record of the report itself stays in the
+    /// journal, so a reader following the event stream still sees what each child returned.
     ///
-    /// What this changes is the slope, not the limit. The relationship stays, so a parent's list still
-    /// grows with the number of children it has ever started; what stops growing is the child state
-    /// each entry carries, which is the larger half of an entry for any child whose state is more than
-    /// a field or two. Bounding the list itself is
-    /// <see cref="Sagant.Settings.WorkflowSettings.PruneFinalizedChildren"/>, which drops the entries
-    /// outright.
+    /// This changes the slope of a parent's growth, and leaves the limit where it was: the
+    /// relationship stays, so a parent's list still grows with the number of children it has ever
+    /// started; what stops growing is the child state each entry carries, which is the larger half of
+    /// an entry for any child whose state is more than a field or two.
+    /// <see cref="Sagant.Settings.WorkflowSettings.PruneFinalizedChildren"/> is the setting that
+    /// bounds the list itself, by dropping the entries outright.
     ///
     /// A member still <c>Pending</c>/<c>TerminationRequested</c> keeps everything, having yet to
     /// report anything.
@@ -204,20 +209,22 @@ public static class ChildGroupPolicy
         IReadOnlyList<ChildWorkflowRelationship> children, string finalizedGroupId)
     {
         List<ChildWorkflowRelationship>? released = null;
-        for (var i = 0; i < children.Count; i++)
+        var index = 0;
+        foreach (var child in children)
         {
-            var child = children[i];
             if (child.GroupId != finalizedGroupId || child.Result is null
                 || child.Status is ChildStatus.Pending or ChildStatus.TerminationRequested)
             {
+                index++;
                 continue;
             }
 
             released ??= children.ToList();
-            released[i] = child with { Result = null };
+            released[index] = child with { Result = null };
+            index++;
         }
 
-        return released ?? children;
+        return released?.ToImmutableList() ?? children;
     }
 
     public static IReadOnlyList<ChildWorkflowRelationship> PruneFinalizedGroupMembers(
@@ -225,5 +232,5 @@ public static class ChildGroupPolicy
         children
             .Where(c => c.GroupId != finalizedGroupId
                 || c.Status is ChildStatus.Pending or ChildStatus.TerminationRequested)
-            .ToList();
+            .ToImmutableList();
 }

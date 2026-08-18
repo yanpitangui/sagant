@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Sagant.Protocol;
 
 namespace Sagant.Execution;
@@ -215,19 +216,33 @@ public static class WorkflowEventFold
         return envelope;
     }
 
+    /// <summary>
+    /// Every function on this page that returns a changed <c>Children</c> value returns it as an
+    /// <see cref="ImmutableList{T}"/> — the type <see cref="UpdateMember"/> uses to make one child
+    /// report's update share structure with the list, which is what keeps a fan-out's per-report cost
+    /// from growing with the group's size (guarantee H5). Widening the list here, the moment a group
+    /// first exists, means every later report already holds the type that update needs.
+    /// </summary>
     private static IReadOnlyList<ChildWorkflowRelationship> Concat(
         IReadOnlyList<ChildWorkflowRelationship>? existing, IReadOnlyList<ChildWorkflowRelationship> added)
     {
         if (existing is not { Count: > 0 })
         {
-            return added;
+            return ImmutableList.CreateRange(added);
         }
 
-        var combined = new List<ChildWorkflowRelationship>(existing.Count + added.Count);
-        combined.AddRange(existing);
-        combined.AddRange(added);
-        return combined;
+        return AsImmutable(existing).AddRange(added);
     }
+
+    /// <summary>
+    /// <paramref name="children"/> as an <see cref="ImmutableList{T}"/> at no cost when it already is
+    /// one — true for any list this fold itself produced — and by copying it once otherwise: a
+    /// snapshot written before this type existed, or a value a caller built by hand. Either way, every
+    /// function downstream of this one works from the fast shape from here on.
+    /// </summary>
+    private static ImmutableList<ChildWorkflowRelationship> AsImmutable(
+        IReadOnlyList<ChildWorkflowRelationship> children) =>
+        children as ImmutableList<ChildWorkflowRelationship> ?? ImmutableList.CreateRange(children);
 
     private static IReadOnlyDictionary<string, ChildGroupState> With(
         IReadOnlyDictionary<string, ChildGroupState>? groups, string groupId, ChildGroupState group)
@@ -239,6 +254,14 @@ public static class WorkflowEventFold
         return updated;
     }
 
+    /// <summary>
+    /// One child's report, folded in. This is what a fan-out pays once per member, so what it costs is
+    /// what guarantee H5 is measured by: <see cref="ImmutableList{T}.FindIndex(Predicate{T})"/> still
+    /// reads every member up to the one that matches — answering for a member means looking at it —
+    /// but <see cref="ImmutableList{T}.SetItem(int, T)"/> shares every node off the path to that
+    /// member's position, allocating only that path. The scan stays; what a whole-list copy would
+    /// otherwise cost is what this removes.
+    /// </summary>
     private static IReadOnlyList<ChildWorkflowRelationship>? UpdateMember(
         IReadOnlyList<ChildWorkflowRelationship>? children, WorkflowEvent.ChildMemberUpdated e)
     {
@@ -247,23 +270,28 @@ public static class WorkflowEventFold
             return null;
         }
 
-        var updated = new List<ChildWorkflowRelationship>(children.Count);
-        foreach (var child in children)
+        var immutable = AsImmutable(children);
+        var index = immutable.FindIndex(c => c.RelationshipId == e.RelationshipId);
+        if (index < 0)
         {
-            updated.Add(child.RelationshipId == e.RelationshipId
-                ? child with
-                {
-                    Status = e.Status,
-                    Result = e.Result,
-                    Failure = e.Failure,
-                    ResultTraceParent = e.ResultTraceParent,
-                }
-                : child);
+            return immutable;
         }
 
-        return updated;
+        return immutable.SetItem(index, immutable[index] with
+        {
+            Status = e.Status,
+            Result = e.Result,
+            Failure = e.Failure,
+            ResultTraceParent = e.ResultTraceParent,
+        });
     }
 
+    /// <summary>
+    /// Marks every relationship named in <paramref name="relationshipIds"/> as
+    /// <see cref="ChildStatus.TerminationRequested"/>, one lookup-and-share per id — a fixed cost
+    /// against <paramref name="relationshipIds"/>, which is normally far smaller than
+    /// <paramref name="children"/>, since it names only the members a policy is asking to stop.
+    /// </summary>
     private static IReadOnlyList<ChildWorkflowRelationship>? MarkTerminationRequested(
         IReadOnlyList<ChildWorkflowRelationship>? children, IReadOnlyList<string> relationshipIds)
     {
@@ -272,13 +300,14 @@ public static class WorkflowEventFold
             return children;
         }
 
-        var requested = relationshipIds.ToHashSet();
-        var updated = new List<ChildWorkflowRelationship>(children.Count);
-        foreach (var child in children)
+        var updated = AsImmutable(children);
+        foreach (var relationshipId in relationshipIds)
         {
-            updated.Add(requested.Contains(child.RelationshipId)
-                ? child with { Status = ChildStatus.TerminationRequested }
-                : child);
+            var index = updated.FindIndex(c => c.RelationshipId == relationshipId);
+            if (index >= 0)
+            {
+                updated = updated.SetItem(index, updated[index] with { Status = ChildStatus.TerminationRequested });
+            }
         }
 
         return updated;
@@ -292,20 +321,7 @@ public static class WorkflowEventFold
             return envelope;
         }
 
-        var children = envelope.Children;
-        if (children is not null && e.TerminationRequested.Count > 0)
-        {
-            var requested = e.TerminationRequested.ToHashSet();
-            var updated = new List<ChildWorkflowRelationship>(children.Count);
-            foreach (var child in children)
-            {
-                updated.Add(requested.Contains(child.RelationshipId)
-                    ? child with { Status = ChildStatus.TerminationRequested }
-                    : child);
-            }
-
-            children = updated;
-        }
+        var children = MarkTerminationRequested(envelope.Children, e.TerminationRequested);
 
         if (children is not null)
         {

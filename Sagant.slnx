@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Sagant.Benchmarks/Sagant.Benchmarks.csproj" />
+  </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/OrderFulfillment/OrderFulfillment.AppHost/OrderFulfillment.AppHost.csproj" />
     <Project Path="samples/OrderFulfillment/OrderFulfillment.Sample/OrderFulfillment.Sample.csproj" />
