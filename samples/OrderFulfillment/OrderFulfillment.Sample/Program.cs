@@ -3,8 +3,8 @@ using Sagant.Runtime.Akka.Clustering;
 using Sagant.Runtime.Akka.Deadlines;
 using Sagant.Scheduling;
 using Sagant.Protocol;
-using Aaron.Akka.Aspire;
-using Aaron.Akka.Discovery.Redis;
+using Akka.Aspire;
+using Akka.Discovery.Redis;
 using Akka.Actor;
 using Akka.Cluster.Hosting;
 using Akka.Cluster.Tools.PublishSubscribe;
@@ -53,7 +53,7 @@ builder.Services.AddSingleton<OrderPlacementService>();
 builder.Services.AddRazorPages();
 
 // akka-cluster-membership and the actor-system liveness check are registered into this same
-// IHealthChecksBuilder by WithAspireClusterBootstrap below (see Aaron.Akka.Aspire) — this call just
+// IHealthChecksBuilder by WithAspireClusterBootstrap below (see Akka.Aspire) — this call just
 // wires the ASP.NET Core health-check middleware up to receive them.
 builder.Services.AddHealthChecks();
 

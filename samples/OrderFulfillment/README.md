@@ -91,7 +91,7 @@ A multi-step saga built on Sagant, driven through `IWorkflowClient` into a real
 - **`akka-discovery`** (Redis) is purely cluster peer-discovery plumbing — stateless,
   disposable. Aspire assigns each of the 3 replicas a dynamic port with no fixed "node 0"
   address to hardcode as a seed node, so peer discovery goes through
-  [`Aaronontheweb/akka.net-aspire-plugin`](https://github.com/Aaronontheweb/akka.net-aspire-plugin)'s
+  [`akkadotnet/Akka.Management`](https://github.com/akkadotnet/Akka.Management)'s
   Redis-backed `Akka.Management.Cluster.Bootstrap` integration instead of manual
   seed-nodes HOCON.
 - **`order-fulfillment-sample`** — 3 identical replicas (`WithReplicas(3)` in the

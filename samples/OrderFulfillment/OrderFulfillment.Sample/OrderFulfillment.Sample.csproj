@@ -27,14 +27,14 @@
          wires into, and WithRedisDiscovery is the peer-discovery backend it feeds Akka.Management's
          ClusterBootstrap. Replaces the manual WithRemoting/WithClustering/self-join dance a
          single-node host doesn't need Aspire's replica-peer-discovery problem to solve. -->
-    <PackageReference Include="Aaron.Akka.Aspire" Version="0.2.1" />
-    <PackageReference Include="Aaron.Akka.Discovery.Redis" Version="0.2.1" />
-    <!-- Not Akka.Persistence.PostgreSql(.Hosting) — that line is pinned at 1.5.37 upstream and
-         doesn't track Akka core's abstract-class shape past that point, the same trap that ruled
-         out Akka.Persistence.Sqlite here earlier (pinned 1.5.39, TypeLoadException against core
-         1.5.70, plus an unpatched high-severity SQLitePCLRaw CVE — see Sagant.Tests). Akka.Persistence.Sql
-         is the actively-maintained, provider-agnostic (Linq2Db-based) successor and tracks core
-         1:1 — same 1.5.70 as everything else here. -->
+    <PackageReference Include="Akka.Aspire" Version="1.5.70" />
+    <PackageReference Include="Akka.Discovery.Redis" Version="1.5.70" />
+    <!-- Akka.Persistence.Sql is the actively-maintained, provider-agnostic (Linq2Db-based) journal/
+         snapshot store here, tracking Akka core 1:1 — same 1.5.70 as everything else in this file.
+         Akka.Persistence.PostgreSql(.Hosting) pins at 1.5.37 upstream, stalled against Akka core's
+         abstract-class shape past that point. Akka.Persistence.Sqlite pinned 1.5.39 hit the same
+         wall here earlier — a TypeLoadException against core 1.5.70, plus an unpatched high-severity
+         SQLitePCLRaw CVE (see Sagant.Tests). -->
     <PackageReference Include="Akka.Persistence.Sql" Version="1.5.70" />
     <PackageReference Include="Akka.Persistence.Sql.Hosting" Version="1.5.70" />
     <PackageReference Include="Npgsql" Version="9.0.3" />

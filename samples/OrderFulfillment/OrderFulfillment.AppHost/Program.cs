@@ -1,4 +1,4 @@
-using Aaron.Akka.Aspire.Hosting;
+using Akka.Aspire.Hosting;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -20,9 +20,9 @@ var postgres = builder.AddPostgres("postgres", password: postgresPassword)
 var ordersDb = postgres.AddDatabase("orders-db");
 
 // Redis backs Akka.Management's ClusterBootstrap peer discovery for the 3 replicas below (see
-// Aaron.Akka.Aspire.Hosting/Aaron.Akka.Discovery.Redis in OrderFulfillment.Sample's Program.cs).
+// Akka.Aspire.Hosting/Akka.Discovery.Redis in OrderFulfillment.Sample's Program.cs).
 // Default (non-persistent) container lifetime: each replica's entry here is only valid for that
-// specific run's dynamically-assigned ports. Aaron.Akka.Discovery.Redis deregisters a replica's own
+// specific run's dynamically-assigned ports. Akka.Discovery.Redis deregisters a replica's own
 // entry on graceful shutdown only, so a fresh container every run is what keeps a prior run's dead
 // entries from ever piling up — ClusterBootstrap waits on every discovered entry, live or not.
 var akkaDiscovery = builder.AddRedis("akka-discovery");
