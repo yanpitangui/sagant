@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Sagant.Effects;
 using Sagant.Execution;
 using Sagant.Protocol;
@@ -188,8 +189,8 @@ public class WorkflowEventFoldTests
             new WorkflowEvent.ChildMemberUpdated(a.RelationshipId, ChildStatus.Completed, null, null, null),
         });
 
-        Assert.Equal(ChildStatus.Completed, envelope.Children!.Single(c => c.RelationshipId == a.RelationshipId).Status);
-        Assert.Equal(ChildStatus.Pending, envelope.Children!.Single(c => c.RelationshipId == b.RelationshipId).Status);
+        Assert.Equal(ChildStatus.Completed, envelope.Children![a.RelationshipId].Status);
+        Assert.Equal(ChildStatus.Pending, envelope.Children![b.RelationshipId].Status);
     }
 
     /// <summary>
@@ -202,8 +203,9 @@ public class WorkflowEventFoldTests
     {
         Assert.Equal(expected with { Children = null, ChildGroups = null },
                      actual with { Children = null, ChildGroups = null });
-        Assert.Equal(expected.Children ?? Array.Empty<ChildWorkflowRelationship>(),
-                     actual.Children ?? Array.Empty<ChildWorkflowRelationship>());
+        Assert.Equal(
+            (expected.Children ?? ImmutableDictionary<string, ChildWorkflowRelationship>.Empty).Values.OrderBy(c => c.RelationshipId),
+            (actual.Children ?? ImmutableDictionary<string, ChildWorkflowRelationship>.Empty).Values.OrderBy(c => c.RelationshipId));
         Assert.Equal(
             (expected.ChildGroups ?? new Dictionary<string, ChildGroupState>()).OrderBy(kv => kv.Key),
             (actual.ChildGroups ?? new Dictionary<string, ChildGroupState>()).OrderBy(kv => kv.Key));

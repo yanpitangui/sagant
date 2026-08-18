@@ -2,6 +2,7 @@ using Sagant.Protocol;
 using Sagant.Descriptors;
 using Sagant.Runtime.Akka;
 using Sagant.Runtime.Akka.Execution;
+using Sagant.Runtime.Akka.Serialization;
 using Akka.Actor;
 using Akka.Cluster.Hosting;
 using Akka.Cluster.Sharding.Delivery;
@@ -93,6 +94,14 @@ public static class WorkflowClusterShardingExtensions
         where TWorkflow : Workflow<TState>, IWorkflowStepDispatcher<TState>, IWorkflowCommandDispatcher<TState>, IWorkflowQueryDispatcher<TState>, IWorkflowChildResultDispatcher<TState>, IWorkflowTypeInfo
     {
         var typeName = typeof(TWorkflow).Name;
+
+        // Binds WorkflowRuntimeStateSerializer to this call's own closed WorkflowRuntimeState<TState>
+        // — scoped to this one type, so nothing else this ActorSystem serializes is affected. A
+        // second WithWorkflow call for a different TState adds its own binding line alongside this
+        // one; the "serializers" line naming the class is identical every time, so repeating it
+        // across calls on the same ActorSystem is harmless. See WorkflowRuntimeStateSerializer's own
+        // doc comment for why this exists.
+        builder = builder.AddHocon(WorkflowRuntimeStateSerializerSetup.HoconFor<TState>(), HoconAddMode.Prepend);
         var shardOptions = new ShardOptions
         {
             // Default hand-off-stop message: lets an in-flight step (fire-and-PipeTo, running

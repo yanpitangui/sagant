@@ -505,7 +505,7 @@ public static class WorkflowTransitionPlanner
                 break;
 
             case Transition.AwaitChildrenTransition:
-                foreach (var relationship in next.Children!.Where(c => c.Status == ChildStatus.Pending && c.GroupId == groupId))
+                foreach (var relationship in next.Children!.Values.Where(c => c.Status == ChildStatus.Pending && c.GroupId == groupId))
                 {
                     decisions.Add(new WorkflowDecision.StartChild(relationship));
                 }

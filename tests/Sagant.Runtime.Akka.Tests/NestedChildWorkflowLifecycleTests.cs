@@ -79,7 +79,7 @@ public class NestedChildWorkflowLifecycleTests : WorkflowActorTestKit
 
             // ...and, at the very same time, the parent of its own leaf. Neither field crowds out
             // the other — this is the whole claim nesting depends on.
-            var leafRelationship = Assert.Single(diagnostics.Envelope.Children!);
+            var leafRelationship = Assert.Single(diagnostics.Envelope.Children!.Values);
             Assert.Equal("leaf-1", leafRelationship.ChildWorkflowId);
             Assert.Equal(ChildStatus.Pending, leafRelationship.Status);
         }, TimeSpan.FromSeconds(10));

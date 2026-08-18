@@ -92,7 +92,7 @@ public class ChildWorkflowPruningTests : WorkflowActorTestKit
             // The failed member reached a terminal ChildStatus in a now-finalized group — pruned.
             // The straggler is still Pending — left in place even though its group has finalized
             // around it (see PruneFinalizedGroupMembers's own doc comment).
-            var remaining = Assert.Single(diagnostics.Envelope.Children!);
+            var remaining = Assert.Single(diagnostics.Envelope.Children!.Values);
             Assert.Equal("child-straggler", remaining.ChildWorkflowId);
             Assert.Equal(ChildStatus.Pending, remaining.Status);
         }, TimeSpan.FromSeconds(10));
@@ -139,7 +139,7 @@ public class ChildWorkflowPruningTests : WorkflowActorTestKit
             Assert.Equal("shipped", seenAtResume);
 
             // What the parent keeps is the record of the child, without the state it returned.
-            var kept = Assert.Single(diagnostics.Envelope.Children!);
+            var kept = Assert.Single(diagnostics.Envelope.Children!.Values);
             Assert.Equal("child-1", kept.ChildWorkflowId);
             Assert.Equal(ChildStatus.Completed, kept.Status);
             Assert.Null(kept.Result);

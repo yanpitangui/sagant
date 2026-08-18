@@ -1515,26 +1515,6 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
     /// path. The relationship/group mutation and that transition are one persisted envelope, so a
     /// recovered actor cannot resume twice or forget that it requested straggler termination.
     /// </summary>
-    /// <summary>Index of the relationship with this id, or <c>-1</c>. A linear scan over a list the
-    /// caller already holds, so an unknown id costs one pass and nothing else — a foreach, so that
-    /// pass stays one pass for whatever collection backs <c>children</c> (see
-    /// <c>WorkflowEventFold.Concat</c>).</summary>
-    private static int IndexOfRelationship(IReadOnlyList<ChildWorkflowRelationship> children, string relationshipId)
-    {
-        var index = 0;
-        foreach (var child in children)
-        {
-            if (child.RelationshipId == relationshipId)
-            {
-                return index;
-            }
-
-            index++;
-        }
-
-        return -1;
-    }
-
     private void ApplyChildLifecycleNotification(
         ChildLifecycleNotification notification, (string ProducerId, long SeqNr)? seqNrUpdate, Action? confirmDelivery)
     {
@@ -1549,17 +1529,14 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         }
 
         // Locate the reported member before copying anything: a notification for a relationship this
-        // instance doesn't know, or one whose group has moved on, costs a single scan and no
+        // instance doesn't know, or one whose group has moved on, costs a single key lookup and no
         // allocation at all.
         var existing = _envelope.Children;
-        var index = existing is null ? -1 : IndexOfRelationship(existing, notification.RelationshipId);
-        if (index < 0)
+        if (existing is null || !existing.TryGetValue(notification.RelationshipId, out var member))
         {
             confirmDelivery?.Invoke();
             return;
         }
-
-        var member = existing![index];
         var group = _envelope.ChildGroups?.GetValueOrDefault(member.GroupId);
         if (group is null || group.Finalized || notification.Generation != group.Generation)
         {
@@ -1601,23 +1578,22 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         // The group is over, so this is the report that needs its members: the resume step is handed
         // them, and the trace links and any stragglers are read off them.
         var groupMembers = new List<ChildWorkflowRelationship>(tally.Total);
-        var position = 0;
-        foreach (var child in existing)
+        foreach (var child in existing.Values)
         {
-            if (child.GroupId == member.GroupId)
+            if (child.GroupId != member.GroupId)
             {
-                groupMembers.Add(position == index
-                    ? child with
-                    {
-                        Status = notification.Status,
-                        Result = notification.Result,
-                        Failure = notification.Failure,
-                        ResultTraceParent = notification.ResultTraceParent,
-                    }
-                    : child);
+                continue;
             }
 
-            position++;
+            groupMembers.Add(child.RelationshipId == notification.RelationshipId
+                ? child with
+                {
+                    Status = notification.Status,
+                    Result = notification.Result,
+                    Failure = notification.Failure,
+                    ResultTraceParent = notification.ResultTraceParent,
+                }
+                : child);
         }
 
         var stragglers = group.RemainingChildrenPolicy == RemainingChildrenPolicy.Terminate
@@ -1940,7 +1916,7 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         // A relationship is persisted before its first child-start/terminate Tell. If this actor
         // died in that gap, no delivery layer could have buffered a message it never received;
         // relationship state is therefore the durable source of truth for recovery redelivery.
-        foreach (var child in _envelope.Children ?? Enumerable.Empty<ChildWorkflowRelationship>())
+        foreach (var child in _envelope.Children?.Values ?? Enumerable.Empty<ChildWorkflowRelationship>())
         {
             switch (child.Status)
             {

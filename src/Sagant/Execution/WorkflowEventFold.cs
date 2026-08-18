@@ -217,32 +217,19 @@ public static class WorkflowEventFold
     }
 
     /// <summary>
-    /// Every function on this page that returns a changed <c>Children</c> value returns it as an
-    /// <see cref="ImmutableList{T}"/> — the type <see cref="UpdateMember"/> uses to make one child
-    /// report's update share structure with the list, which is what keeps a fan-out's per-report cost
-    /// from growing with the group's size (guarantee H5). Widening the list here, the moment a group
-    /// first exists, means every later report already holds the type that update needs.
+    /// Adds a freshly-started group's relationships, keyed by <see cref="ChildWorkflowRelationship.RelationshipId"/>
+    /// — the shape every later per-member report (<see cref="UpdateMember"/>) needs to record its
+    /// update as one key lookup and a shared-structure write.
     /// </summary>
-    private static IReadOnlyList<ChildWorkflowRelationship> Concat(
-        IReadOnlyList<ChildWorkflowRelationship>? existing, IReadOnlyList<ChildWorkflowRelationship> added)
+    private static IImmutableDictionary<string, ChildWorkflowRelationship> Concat(
+        IImmutableDictionary<string, ChildWorkflowRelationship>? existing, IReadOnlyList<ChildWorkflowRelationship> added)
     {
-        if (existing is not { Count: > 0 })
-        {
-            return ImmutableList.CreateRange(added);
-        }
+        var pairs = added.Select(r => new KeyValuePair<string, ChildWorkflowRelationship>(r.RelationshipId, r));
 
-        return AsImmutable(existing).AddRange(added);
+        return existing is null
+            ? ImmutableDictionary.CreateRange(pairs)
+            : existing.SetItems(pairs);
     }
-
-    /// <summary>
-    /// <paramref name="children"/> as an <see cref="ImmutableList{T}"/> at no cost when it already is
-    /// one — true for any list this fold itself produced — and by copying it once otherwise: a
-    /// snapshot written before this type existed, or a value a caller built by hand. Either way, every
-    /// function downstream of this one works from the fast shape from here on.
-    /// </summary>
-    private static ImmutableList<ChildWorkflowRelationship> AsImmutable(
-        IReadOnlyList<ChildWorkflowRelationship> children) =>
-        children as ImmutableList<ChildWorkflowRelationship> ?? ImmutableList.CreateRange(children);
 
     private static IReadOnlyDictionary<string, ChildGroupState> With(
         IReadOnlyDictionary<string, ChildGroupState>? groups, string groupId, ChildGroupState group)
@@ -255,29 +242,19 @@ public static class WorkflowEventFold
     }
 
     /// <summary>
-    /// One child's report, folded in. This is what a fan-out pays once per member, so what it costs is
-    /// what guarantee H5 is measured by: <see cref="ImmutableList{T}.FindIndex(Predicate{T})"/> still
-    /// reads every member up to the one that matches — answering for a member means looking at it —
-    /// but <see cref="ImmutableList{T}.SetItem(int, T)"/> shares every node off the path to that
-    /// member's position, allocating only that path. The scan stays; what a whole-list copy would
-    /// otherwise cost is what this removes.
+    /// One child's report, folded in. This is what a fan-out pays once per member: a key lookup on
+    /// <see cref="WorkflowEvent.ChildMemberUpdated.RelationshipId"/> plus a shared-structure write,
+    /// with no other member touched — the cost guarantee H5 measures.
     /// </summary>
-    private static IReadOnlyList<ChildWorkflowRelationship>? UpdateMember(
-        IReadOnlyList<ChildWorkflowRelationship>? children, WorkflowEvent.ChildMemberUpdated e)
+    private static IImmutableDictionary<string, ChildWorkflowRelationship>? UpdateMember(
+        IImmutableDictionary<string, ChildWorkflowRelationship>? children, WorkflowEvent.ChildMemberUpdated e)
     {
-        if (children is null)
+        if (children is null || !children.TryGetValue(e.RelationshipId, out var existing))
         {
-            return null;
+            return children;
         }
 
-        var immutable = AsImmutable(children);
-        var index = immutable.FindIndex(c => c.RelationshipId == e.RelationshipId);
-        if (index < 0)
-        {
-            return immutable;
-        }
-
-        return immutable.SetItem(index, immutable[index] with
+        return children.SetItem(e.RelationshipId, existing with
         {
             Status = e.Status,
             Result = e.Result,
@@ -292,21 +269,20 @@ public static class WorkflowEventFold
     /// against <paramref name="relationshipIds"/>, which is normally far smaller than
     /// <paramref name="children"/>, since it names only the members a policy is asking to stop.
     /// </summary>
-    private static IReadOnlyList<ChildWorkflowRelationship>? MarkTerminationRequested(
-        IReadOnlyList<ChildWorkflowRelationship>? children, IReadOnlyList<string> relationshipIds)
+    private static IImmutableDictionary<string, ChildWorkflowRelationship>? MarkTerminationRequested(
+        IImmutableDictionary<string, ChildWorkflowRelationship>? children, IReadOnlyList<string> relationshipIds)
     {
         if (children is null || relationshipIds.Count == 0)
         {
             return children;
         }
 
-        var updated = AsImmutable(children);
+        var updated = children;
         foreach (var relationshipId in relationshipIds)
         {
-            var index = updated.FindIndex(c => c.RelationshipId == relationshipId);
-            if (index >= 0)
+            if (updated.TryGetValue(relationshipId, out var child))
             {
-                updated = updated.SetItem(index, updated[index] with { Status = ChildStatus.TerminationRequested });
+                updated = updated.SetItem(relationshipId, child with { Status = ChildStatus.TerminationRequested });
             }
         }
 

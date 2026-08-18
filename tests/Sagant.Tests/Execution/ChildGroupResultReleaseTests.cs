@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Sagant.Effects;
 using Sagant.Execution;
 using Sagant.Protocol;
@@ -9,7 +10,7 @@ namespace Sagant.Tests.Execution;
 /// group finalizes, and each child keeps its own state under its own id, so what the parent carries
 /// from there is the record of each child: who it was, how it ended, and what it reported as failing.
 ///
-/// This is what bounds a parent that starts groups in a loop, whose child list lives as long as it
+/// This is what bounds a parent that starts groups in a loop, whose child map lives as long as it
 /// does and is written into every snapshot it takes.
 /// </summary>
 public class ChildGroupResultReleaseTests
@@ -53,7 +54,7 @@ public class ChildGroupResultReleaseTests
             new WorkflowEvent.ChildGroupFinalized("group-1", [], PruneTerminalMembers: false),
         });
 
-        var kept = Assert.Single(envelope.Children!);
+        var kept = Assert.Single(envelope.Children!.Values);
         Assert.Null(kept.Result);
         Assert.Equal(ChildStatus.Completed, kept.Status);
         Assert.Equal("item-1", kept.ChildWorkflowId);
@@ -73,7 +74,7 @@ public class ChildGroupResultReleaseTests
             new WorkflowEvent.ChildGroupFinalized("group-1", [], PruneTerminalMembers: false),
         });
 
-        var kept = Assert.Single(envelope.Children!);
+        var kept = Assert.Single(envelope.Children!.Values);
         Assert.Equal(ChildStatus.Failed, kept.Status);
         Assert.Equal("gateway down", kept.Failure!.Message);
     }
@@ -93,7 +94,7 @@ public class ChildGroupResultReleaseTests
         });
 
         Assert.Equal(2, envelope.Children!.Count);
-        Assert.Equal(ChildStatus.Pending, envelope.Children.Single(c => c.ChildWorkflowId == "item-2").Status);
+        Assert.Equal(ChildStatus.Pending, envelope.Children.Values.Single(c => c.ChildWorkflowId == "item-2").Status);
     }
 
     /// <summary>A parent awaiting two groups at once keeps the one that has yet to resolve intact.</summary>
@@ -113,10 +114,10 @@ public class ChildGroupResultReleaseTests
             new WorkflowEvent.ChildGroupFinalized("group-1", [], PruneTerminalMembers: false),
         });
 
-        Assert.Null(envelope.Children!.Single(c => c.GroupId == "group-1").Result);
+        Assert.Null(envelope.Children!.Values.Single(c => c.GroupId == "group-1").Result);
         Assert.Equal(
             new ItemState("dispatched"),
-            envelope.Children.Single(c => c.GroupId == "group-2").Result);
+            envelope.Children.Values.Single(c => c.GroupId == "group-2").Result);
     }
 
     /// <summary>Pruning drops the members outright, which is the setting's own behaviour.</summary>
@@ -132,16 +133,17 @@ public class ChildGroupResultReleaseTests
             new WorkflowEvent.ChildGroupFinalized("group-1", [], PruneTerminalMembers: true),
         });
 
-        Assert.Empty(envelope.Children!);
+        Assert.Empty(envelope.Children!.Values);
     }
 
-    /// <summary>Nothing to release leaves the list itself alone, which is what keeps an ordinary
-    /// finalization from copying a list it does not change.</summary>
+    /// <summary>Nothing to release leaves the map itself alone, which is what keeps an ordinary
+    /// finalization from copying a map it does not change.</summary>
     [Fact]
-    public void AGroupWithNoResultsToReleaseKeepsTheSameList()
+    public void AGroupWithNoResultsToReleaseKeepsTheSameMap()
     {
-        IReadOnlyList<ChildWorkflowRelationship> children =
-            [Member("item-1") with { Status = ChildStatus.Terminated }];
+        var member = Member("item-1") with { Status = ChildStatus.Terminated };
+        var children = ImmutableDictionary.CreateRange(
+            new[] { new KeyValuePair<string, ChildWorkflowRelationship>(member.RelationshipId, member) });
 
         Assert.Same(children, ChildGroupPolicy.ReleaseFinalizedGroupResults(children, "group-1"));
     }

@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Sagant.Effects;
 using Sagant.Protocol;
 
@@ -25,6 +26,9 @@ public class ChildGroupTallyTests
             ParentClosePolicy: ParentClosePolicy.Terminate,
             Command: new object());
 
+    private static IImmutableDictionary<string, ChildWorkflowRelationship> Dict(params ChildWorkflowRelationship[] children) =>
+        children.ToImmutableDictionary(c => c.RelationshipId);
+
     private static ChildGroupState Group(
         CompletionPolicy completion = CompletionPolicy.AllSuccessful,
         FailurePolicy failure = FailurePolicy.WaitForAll) =>
@@ -42,7 +46,7 @@ public class ChildGroupTallyTests
             Member("c", "shipments", ChildStatus.Failed),
         };
 
-        var tally = ChildGroupPolicy.TallyGroup(children, "items", "zzz", ChildStatus.Completed);
+        var tally = ChildGroupPolicy.TallyGroup(Dict(children), "items", "zzz", ChildStatus.Completed);
 
         Assert.Equal(2, tally.Total);
         Assert.Equal(1, tally.Settled);
@@ -61,7 +65,7 @@ public class ChildGroupTallyTests
             Member("b", "items", ChildStatus.Pending),
         };
 
-        var tally = ChildGroupPolicy.TallyGroup(children, "items", "b", ChildStatus.Failed);
+        var tally = ChildGroupPolicy.TallyGroup(Dict(children), "items", "b", ChildStatus.Failed);
 
         Assert.Equal(2, tally.Total);
         Assert.Equal(2, tally.Settled);
@@ -75,7 +79,7 @@ public class ChildGroupTallyTests
     [InlineData(ChildStatus.Terminated)]
     public void EveryWayOfEndingBadlyCountsAsFailed(ChildStatus status)
     {
-        var tally = ChildGroupPolicy.TallyGroup([Member("a", "items", status)], "items", "zzz", ChildStatus.Completed);
+        var tally = ChildGroupPolicy.TallyGroup(Dict(Member("a", "items", status)), "items", "zzz", ChildStatus.Completed);
 
         Assert.Equal(1, tally.Failed);
         Assert.Equal(1, tally.Settled);
@@ -90,7 +94,7 @@ public class ChildGroupTallyTests
     {
         var children = new[] { Member("a", "items", ChildStatus.Completed), Member("b", "items", status) };
 
-        var tally = ChildGroupPolicy.TallyGroup(children, "items", "zzz", ChildStatus.Completed);
+        var tally = ChildGroupPolicy.TallyGroup(Dict(children), "items", "zzz", ChildStatus.Completed);
 
         Assert.Equal(2, tally.Total);
         Assert.Equal(1, tally.Settled);
@@ -123,7 +127,7 @@ public class ChildGroupTallyTests
                 var members = new[] { Member("a", "items", first), Member("b", "items", second) };
                 var fromList = ChildGroupPolicy.EvaluateGroupOutcome(group, members);
                 var fromTally = ChildGroupPolicy.EvaluateGroupOutcome(
-                    group, ChildGroupPolicy.TallyGroup(members, "items", "zzz", ChildStatus.Completed));
+                    group, ChildGroupPolicy.TallyGroup(Dict(members), "items", "zzz", ChildStatus.Completed));
 
                 Assert.Equal(fromList, fromTally);
             }
@@ -135,7 +139,7 @@ public class ChildGroupTallyTests
     public void FailFastResolvesBeforeEveryMemberSettles()
     {
         var children = new[] { Member("a", "items", ChildStatus.Failed), Member("b", "items", ChildStatus.Pending) };
-        var tally = ChildGroupPolicy.TallyGroup(children, "items", "zzz", ChildStatus.Completed);
+        var tally = ChildGroupPolicy.TallyGroup(Dict(children), "items", "zzz", ChildStatus.Completed);
 
         Assert.Equal(
             GroupOutcome.Failed,
@@ -148,7 +152,7 @@ public class ChildGroupTallyTests
     public void AFailedMemberFailsTheGroupUnderAllCompleted()
     {
         var children = new[] { Member("a", "items", ChildStatus.Completed), Member("b", "items", ChildStatus.Failed) };
-        var tally = ChildGroupPolicy.TallyGroup(children, "items", "zzz", ChildStatus.Completed);
+        var tally = ChildGroupPolicy.TallyGroup(Dict(children), "items", "zzz", ChildStatus.Completed);
 
         Assert.Equal(
             GroupOutcome.Failed,

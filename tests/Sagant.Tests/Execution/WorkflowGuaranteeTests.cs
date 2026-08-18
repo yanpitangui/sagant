@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Sagant.Descriptors;
 using Sagant.Effects;
 using Sagant.Execution;
@@ -113,12 +114,12 @@ public class WorkflowGuaranteeTests
     {
         var withChild = FreshEnvelope() with
         {
-            Children = new[] { PendingChild("item-1", ParentClosePolicy.Terminate) },
+            Children = ChildrenOf(PendingChild("item-1", ParentClosePolicy.Terminate)),
         };
 
         var plan = Plan(withChild, new Transition.TerminalTransition(WorkflowOutcome.Completed.Instance));
 
-        Assert.Equal(ChildStatus.TerminationRequested, Folded(withChild, plan).Children!.Single().Status);
+        Assert.Equal(ChildStatus.TerminationRequested, Folded(withChild, plan).Children!.Values.Single().Status);
         Assert.Single(plan.AfterPersist.OfType<WorkflowDecision.TerminateChild>());
     }
 
@@ -127,12 +128,12 @@ public class WorkflowGuaranteeTests
     {
         var withChild = FreshEnvelope() with
         {
-            Children = new[] { PendingChild("item-1", ParentClosePolicy.Abandon) },
+            Children = ChildrenOf(PendingChild("item-1", ParentClosePolicy.Abandon)),
         };
 
         var plan = Plan(withChild, new Transition.TerminalTransition(WorkflowOutcome.Completed.Instance));
 
-        Assert.Equal(ChildStatus.Pending, Folded(withChild, plan).Children!.Single().Status);
+        Assert.Equal(ChildStatus.Pending, Folded(withChild, plan).Children!.Values.Single().Status);
         Assert.Empty(plan.AfterPersist.OfType<WorkflowDecision.TerminateChild>());
     }
 
@@ -144,7 +145,7 @@ public class WorkflowGuaranteeTests
         var plan = Plan(FreshEnvelope(), AwaitTwoChildren());
 
         Assert.Equal(2, Folded(FreshEnvelope(), plan).Children!.Count);
-        Assert.All(Folded(FreshEnvelope(), plan).Children!, c => Assert.Equal(ChildStatus.Pending, c.Status));
+        Assert.All(Folded(FreshEnvelope(), plan).Children!.Values, c => Assert.Equal(ChildStatus.Pending, c.Status));
         Assert.Equal(2, plan.AfterPersist.OfType<WorkflowDecision.StartChild>().Count());
     }
 
@@ -801,7 +802,7 @@ public class WorkflowGuaranteeTests
     {
         var withChild = FreshEnvelope() with
         {
-            Children = new[] { PendingChild("item-1", ParentClosePolicy.Terminate) },
+            Children = ChildrenOf(PendingChild("item-1", ParentClosePolicy.Terminate)),
         };
 
         var plan = Plan(withChild, new Transition.TerminalTransition(new WorkflowOutcome.Cancelled("parent cancelled")));
@@ -815,7 +816,7 @@ public class WorkflowGuaranteeTests
     {
         var withChild = FreshEnvelope() with
         {
-            Children = new[] { PendingChild("item-1", ParentClosePolicy.Terminate) },
+            Children = ChildrenOf(PendingChild("item-1", ParentClosePolicy.Terminate)),
         };
 
         var plan = Plan(withChild, new Transition.TerminalTransition(WorkflowOutcome.Completed.Instance));
@@ -825,6 +826,9 @@ public class WorkflowGuaranteeTests
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────────────────────────
+
+    private static IImmutableDictionary<string, ChildWorkflowRelationship> ChildrenOf(params ChildWorkflowRelationship[] children) =>
+        children.ToImmutableDictionary(c => c.RelationshipId);
 
     private static ChildWorkflowRelationship PendingChild(string childId, ParentClosePolicy policy) =>
         new(

@@ -26,7 +26,9 @@ public sealed class ChildGroupResult
     public GroupOutcome Outcome { get; }
 
     /// <summary>
-    /// The group's members, in the order the group holds them.
+    /// The group's members. A member is always read by id — through <see cref="Get{TWorkflow, TState}"/>,
+    /// <see cref="TryGet{TWorkflow, TState}"/>, <see cref="GetAll{TWorkflow, TState}"/>, or
+    /// <see cref="WorkflowIds"/>. A member's place in this list carries no meaning.
     ///
     /// Public because this value is persisted: it reaches the resume step as that step's input, which
     /// a runtime writes to its journal and reads back on recovery. A member a serializer cannot see is

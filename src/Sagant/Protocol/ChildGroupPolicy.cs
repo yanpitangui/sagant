@@ -32,12 +32,12 @@ public static class ChildGroupPolicy
     /// <paramref name="reportedRelationshipId"/> — the status the report being applied gives it, ahead
     /// of that report being folded in.
     ///
-    /// Takes the whole child list, so a caller holding the list it already has answers for the group
-    /// without building a copy of it. A fan-out reports once per child, and each report asks this
-    /// question, so the copy is the one worth going without.
+    /// Takes the whole child map, so a caller holding it already has answers for the group without
+    /// building a copy. A group's members are scattered across every relationship this instance has
+    /// ever started, so answering for one group still means visiting every value once.
     /// </summary>
     public static ChildGroupTally TallyGroup(
-        IReadOnlyList<ChildWorkflowRelationship> children,
+        IImmutableDictionary<string, ChildWorkflowRelationship> children,
         string groupId,
         string reportedRelationshipId,
         ChildStatus reportedStatus)
@@ -47,9 +47,7 @@ public static class ChildGroupPolicy
         var failed = 0;
         var completed = 0;
 
-        // A plain foreach: children may be an ImmutableList (see WorkflowEventFold.Concat), whose own
-        // enumerator visits every member once in a single pass. This stays that one pass regardless.
-        foreach (var child in children)
+        foreach (var child in children.Values)
         {
             if (child.GroupId != groupId)
             {
@@ -147,32 +145,28 @@ public static class ChildGroupPolicy
             return (envelope, Array.Empty<ChildWorkflowRelationship>());
         }
 
-        // The copy is made by the first child that needs marking, so a parent finishing with nothing
-        // left running — every group already resolved, which is the ordinary ending — reads its
-        // children once and allocates the empty result alone. A plain foreach keeps that one read a
-        // single pass for whatever collection backs Children.
-        List<ChildWorkflowRelationship>? updated = null;
+        // The updates list is built by the first child that needs marking, so a parent finishing with
+        // nothing left running — every group already resolved, which is the ordinary ending — reads
+        // its children once and allocates the empty result alone.
+        List<KeyValuePair<string, ChildWorkflowRelationship>>? updates = null;
         var toTerminate = new List<ChildWorkflowRelationship>();
-        var index = 0;
-        foreach (var child in children)
+        foreach (var (relationshipId, child) in children)
         {
             if (child.ParentClosePolicy != ParentClosePolicy.Terminate
                 || child.Status is not (ChildStatus.Pending or ChildStatus.TerminationRequested))
             {
-                index++;
                 continue;
             }
 
-            updated ??= children.ToList();
             var terminationRequested = child with { Status = ChildStatus.TerminationRequested };
-            updated[index] = terminationRequested;
+            (updates ??= new List<KeyValuePair<string, ChildWorkflowRelationship>>())
+                .Add(new KeyValuePair<string, ChildWorkflowRelationship>(relationshipId, terminationRequested));
             toTerminate.Add(terminationRequested);
-            index++;
         }
 
-        return updated is null
+        return updates is null
             ? (envelope, toTerminate)
-            : (envelope with { Children = updated.ToImmutableList() }, toTerminate);
+            : (envelope with { Children = children.SetItems(updates) }, toTerminate);
     }
 
     /// <summary>
@@ -185,6 +179,17 @@ public static class ChildGroupPolicy
     /// straggler in the same group (see <c>RemainingChildrenPolicy.Terminate</c>) is left in place —
     /// it hasn't reached a terminal status yet, even though its group has finalized around it.
     /// </summary>
+    public static IImmutableDictionary<string, ChildWorkflowRelationship> PruneFinalizedGroupMembers(
+        IImmutableDictionary<string, ChildWorkflowRelationship> children, string finalizedGroupId)
+    {
+        var toRemove = children.Values
+            .Where(c => c.GroupId == finalizedGroupId
+                && c.Status is not (ChildStatus.Pending or ChildStatus.TerminationRequested))
+            .Select(c => c.RelationshipId);
+
+        return children.RemoveRange(toRemove);
+    }
+
     /// <summary>
     /// Releases what a finalized group's terminal members carry: each one's <c>Result</c>, which is a
     /// whole child workflow's final state. The relationship stays, with who the child was, how it
@@ -196,41 +201,31 @@ public static class ChildGroupPolicy
     /// journal, so a reader following the event stream still sees what each child returned.
     ///
     /// This changes the slope of a parent's growth, and leaves the limit where it was: the
-    /// relationship stays, so a parent's list still grows with the number of children it has ever
+    /// relationship stays, so a parent's map still grows with the number of children it has ever
     /// started; what stops growing is the child state each entry carries, which is the larger half of
     /// an entry for any child whose state is more than a field or two.
     /// <see cref="Sagant.Settings.WorkflowSettings.PruneFinalizedChildren"/> is the setting that
-    /// bounds the list itself, by dropping the entries outright.
+    /// bounds the map itself, by dropping the entries outright.
     ///
     /// A member still <c>Pending</c>/<c>TerminationRequested</c> keeps everything, having yet to
     /// report anything.
     /// </summary>
-    public static IReadOnlyList<ChildWorkflowRelationship> ReleaseFinalizedGroupResults(
-        IReadOnlyList<ChildWorkflowRelationship> children, string finalizedGroupId)
+    public static IImmutableDictionary<string, ChildWorkflowRelationship> ReleaseFinalizedGroupResults(
+        IImmutableDictionary<string, ChildWorkflowRelationship> children, string finalizedGroupId)
     {
-        List<ChildWorkflowRelationship>? released = null;
-        var index = 0;
-        foreach (var child in children)
+        List<KeyValuePair<string, ChildWorkflowRelationship>>? released = null;
+        foreach (var (relationshipId, child) in children)
         {
             if (child.GroupId != finalizedGroupId || child.Result is null
                 || child.Status is ChildStatus.Pending or ChildStatus.TerminationRequested)
             {
-                index++;
                 continue;
             }
 
-            released ??= children.ToList();
-            released[index] = child with { Result = null };
-            index++;
+            (released ??= new List<KeyValuePair<string, ChildWorkflowRelationship>>())
+                .Add(new KeyValuePair<string, ChildWorkflowRelationship>(relationshipId, child with { Result = null }));
         }
 
-        return released?.ToImmutableList() ?? children;
+        return released is null ? children : children.SetItems(released);
     }
-
-    public static IReadOnlyList<ChildWorkflowRelationship> PruneFinalizedGroupMembers(
-        IReadOnlyList<ChildWorkflowRelationship> children, string finalizedGroupId) =>
-        children
-            .Where(c => c.GroupId != finalizedGroupId
-                || c.Status is ChildStatus.Pending or ChildStatus.TerminationRequested)
-            .ToImmutableList();
 }

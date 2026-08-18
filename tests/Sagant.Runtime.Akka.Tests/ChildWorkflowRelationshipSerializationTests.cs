@@ -1,17 +1,20 @@
+using System.Collections.Immutable;
 using Sagant.Effects;
 using Sagant.Protocol;
+using Sagant.Runtime.Akka.Serialization;
 using Akka.Actor;
+using Akka.Configuration;
 
 namespace Sagant.Runtime.Akka.Tests;
 
 /// <summary>
 /// Proves the assumption every heterogeneous child-group type from here on depends on: a
-/// <c>Children</c> list where two *different* elements independently carry two *different* concrete
+/// <c>Children</c> map where two *different* entries independently carry two *different* concrete
 /// types in their own polymorphic <see cref="ChildWorkflowRelationship.Result"/> slot round-trip
-/// through the real Akka.Persistence serializer with each element's own concrete type preserved.
+/// through the real Akka.Persistence serializer with each entry's own concrete type preserved.
 /// Proves more than <see cref="WorkflowRuntimeStateSerializationTests"/> already does — that test
 /// covers one polymorphic field; this one covers a collection whose elements are independently
-/// polymorphic among each other, the shape a heterogeneous child group's <c>Children</c> list
+/// polymorphic among each other, the shape a heterogeneous child group's <c>Children</c> map
 /// actually takes in production.
 /// </summary>
 public class ChildWorkflowRelationshipSerializationTests
@@ -25,7 +28,12 @@ public class ChildWorkflowRelationshipSerializationTests
     [Fact]
     public void ChildrenList_RoundTripsThroughRealSerializer_PreservingHeterogeneousResultTypes()
     {
-        using var system = ActorSystem.Create("child-relationship-serialization-test");
+        // Mirrors the binding WithWorkflow<TWorkflow, TState> adds for its own closed
+        // WorkflowRuntimeState<TState> — see WorkflowClusterShardingExtensions and
+        // WorkflowRuntimeStateSerializer's own doc comment for why the default json serializer alone
+        // can't round-trip Children.
+        var config = ConfigurationFactory.ParseString(WorkflowRuntimeStateSerializerSetup.HoconFor<string>());
+        using var system = ActorSystem.Create("child-relationship-serialization-test", config);
 
         var relationships = new List<ChildWorkflowRelationship>
         {
@@ -41,7 +49,8 @@ public class ChildWorkflowRelationshipSerializationTests
         };
         var state = new WorkflowRuntimeState<string>(
             UserState: "order-state", CurrentStepName: null, CurrentStepInput: null,
-            RetryCount: 0, Status: WorkflowStatus.Running, Children: relationships);
+            RetryCount: 0, Status: WorkflowStatus.Running,
+            Children: relationships.ToImmutableDictionary(r => r.RelationshipId));
 
         var serializer = system.Serialization.FindSerializerFor(state);
         var bytes = serializer.ToBinary(state);
@@ -49,7 +58,7 @@ public class ChildWorkflowRelationshipSerializationTests
 
         Assert.NotNull(roundTripped.Children);
 
-        var inventory = roundTripped.Children!.Single(r => r.ChildWorkflowId == "inv-1");
+        var inventory = roundTripped.Children!.Values.Single(r => r.ChildWorkflowId == "inv-1");
         Assert.IsType<InventoryState>(inventory.Result);
         Assert.True(((InventoryState)inventory.Result!).Reserved);
         Assert.Equal(ChildStatus.Completed, inventory.Status);
@@ -57,12 +66,12 @@ public class ChildWorkflowRelationshipSerializationTests
         // The genuinely heterogeneous assertion: a second element, same list, same round trip,
         // carrying an entirely different concrete Result type — proves the serializer preserves
         // each element's own type independently.
-        var payment = roundTripped.Children!.Single(r => r.ChildWorkflowId == "pay-1");
+        var payment = roundTripped.Children!.Values.Single(r => r.ChildWorkflowId == "pay-1");
         Assert.IsType<PaymentState>(payment.Result);
         Assert.Equal(42.50m, ((PaymentState)payment.Result!).AmountCharged);
         Assert.Equal(ChildStatus.Completed, payment.Status);
 
-        var shipping = roundTripped.Children!.Single(r => r.ChildWorkflowId == "ship-1");
+        var shipping = roundTripped.Children!.Values.Single(r => r.ChildWorkflowId == "ship-1");
         Assert.Equal(ChildStatus.Failed, shipping.Status);
         Assert.Null(shipping.Result);
         Assert.Equal("card declined", shipping.Failure!.Message);

@@ -56,7 +56,7 @@ public class ChildFanOutBenchmarks
             RemainingChildrenPolicy.Continue, "OnDone", Finalized: false, null, null);
 
         // Seeded through the real fold path, so Children is exactly what a live instance holds: an
-        // ImmutableList built by WorkflowEventFold.Concat.
+        // ImmutableDictionary built by WorkflowEventFold.Concat, keyed by RelationshipId.
         _envelope = WorkflowEventFold.Apply(
             new WorkflowRuntimeState<string>("state", null, null, 0, WorkflowStatus.Running),
             new WorkflowEvent.ChildrenAwaited(groupId, children, group, 1, null, new TransitionCause.Control("seed")));

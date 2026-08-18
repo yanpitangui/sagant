@@ -1,5 +1,6 @@
 namespace Sagant.Protocol;
 
+using System.Collections.Immutable;
 using Sagant.Idempotency;
 
 /// <summary>
@@ -119,11 +120,16 @@ public sealed record WorkflowRuntimeState<TState>(
     IdempotencyLedger? IdempotencyLedger = null,
     /// <summary>
     /// Every child workflow this instance has ever started, across every group, regardless of
-    /// whether that group has since finalized — the lifetime-scoped list <c>ParentClosePolicy</c>
-    /// operates over. See <see cref="ChildWorkflowRelationship"/>'s own doc comment for why this is
-    /// the single source of truth for every parent/child relationship this instance holds.
+    /// whether that group has since finalized — the lifetime-scoped map <c>ParentClosePolicy</c>
+    /// operates over, keyed by <see cref="ChildWorkflowRelationship.RelationshipId"/>. See that
+    /// type's own doc comment for why this is the single source of truth for every parent/child
+    /// relationship this instance holds.
+    ///
+    /// Keyed by relationship id: a child report names the one relationship it concerns, and recording
+    /// it is a single key lookup plus a shared-structure update. A group's members are always read by
+    /// id.
     /// </summary>
-    IReadOnlyList<ChildWorkflowRelationship>? Children = null,
+    IImmutableDictionary<string, ChildWorkflowRelationship>? Children = null,
     /// <summary>
     /// One entry per active-or-recently-finalized <c>AwaitChildren</c> group this instance has
     /// created, keyed by <c>GroupId</c>. Holds policy + finalization state only — member status

@@ -39,7 +39,7 @@ public class ChildWorkflowLifecycleTests : WorkflowActorTestKit
         {
             actor.Tell(new GetDiagnostics<TestState>(), TestActor);
             var diagnostics = ExpectMsg<Diagnostics<TestState>>();
-            var relationship = Assert.Single(diagnostics.Envelope.Children!);
+            var relationship = Assert.Single(diagnostics.Envelope.Children!.Values);
             Assert.Equal("ScriptableWorkflow", relationship.ChildWorkflowType);
             Assert.Equal("child-1", relationship.ChildWorkflowId);
             Assert.Equal(ChildStatus.Pending, relationship.Status);
@@ -77,7 +77,7 @@ public class ChildWorkflowLifecycleTests : WorkflowActorTestKit
         {
             actor.Tell(new GetDiagnostics<TestState>(), TestActor);
             var diagnostics = ExpectMsg<Diagnostics<TestState>>();
-            var relationship = Assert.Single(diagnostics.Envelope.Children!);
+            var relationship = Assert.Single(diagnostics.Envelope.Children!.Values);
             // Confirms ChildGroupSequence was incremented exactly once total, across both attempts.
             Assert.Equal($"{persistenceId}:group:0", relationship.GroupId);
             Assert.Equal(1, diagnostics.Envelope.ChildGroupSequence);
@@ -111,7 +111,7 @@ public class ChildWorkflowLifecycleTests : WorkflowActorTestKit
 
         actor.Tell(new GetDiagnostics<TestState>(), TestActor);
         var diagnostics = ExpectMsg<Diagnostics<TestState>>();
-        var relationship = Assert.Single(diagnostics.Envelope.Children!);
+        var relationship = Assert.Single(diagnostics.Envelope.Children!.Values);
 
         Assert.Equal(relationship.ChildWorkflowId, enqueue.EntityId);
         Assert.Equal(relationship.ChildWorkflowId, enqueue.Envelope.EntityId);
@@ -189,7 +189,7 @@ public class ChildWorkflowLifecycleTests : WorkflowActorTestKit
         {
             parentActor.Tell(new GetDiagnostics<TestState>(), TestActor);
             var diagnostics = ExpectMsg<Diagnostics<TestState>>();
-            var relationship = Assert.Single(diagnostics.Envelope.Children!);
+            var relationship = Assert.Single(diagnostics.Envelope.Children!.Values);
             Assert.Equal(childPersistenceId, relationship.ChildWorkflowId);
             Assert.Equal(ChildStatus.Completed, relationship.Status);
         }, TimeSpan.FromSeconds(10));
@@ -265,7 +265,7 @@ public class ChildWorkflowLifecycleTests : WorkflowActorTestKit
             actor.Tell(new GetDiagnostics<TestState>(), TestActor);
             var diagnostics = ExpectMsg<Diagnostics<TestState>>();
             Assert.Equal(WorkflowStatus.Finished, diagnostics.Envelope.Status);
-            var straggler = diagnostics.Envelope.Children!.Single(c => c.ChildWorkflowId == "child-2");
+            var straggler = diagnostics.Envelope.Children!.Values.Single(c => c.ChildWorkflowId == "child-2");
             Assert.Equal(ChildStatus.TerminationRequested, straggler.Status);
         }, TimeSpan.FromSeconds(10));
     }
@@ -312,8 +312,8 @@ public class ChildWorkflowLifecycleTests : WorkflowActorTestKit
         {
             actor.Tell(new GetDiagnostics<TestState>(), TestActor);
             var diagnostics = ExpectMsg<Diagnostics<TestState>>();
-            var terminateChild = diagnostics.Envelope.Children!.Single(c => c.ChildWorkflowId == "child-terminate");
-            var abandonChild = diagnostics.Envelope.Children!.Single(c => c.ChildWorkflowId == "child-abandon");
+            var terminateChild = diagnostics.Envelope.Children!.Values.Single(c => c.ChildWorkflowId == "child-terminate");
+            var abandonChild = diagnostics.Envelope.Children!.Values.Single(c => c.ChildWorkflowId == "child-abandon");
             Assert.Equal(WorkflowStatus.Finished, diagnostics.Envelope.Status);
             Assert.Equal(ChildStatus.TerminationRequested, terminateChild.Status);
             Assert.Equal(ChildStatus.Pending, abandonChild.Status);
@@ -411,7 +411,7 @@ public class ChildWorkflowLifecycleTests : WorkflowActorTestKit
         {
             actor2.Tell(new GetDiagnostics<TestState>(), TestActor);
             var diagnostics = ExpectMsg<Diagnostics<TestState>>();
-            var relationship = Assert.Single(diagnostics.Envelope.Children!);
+            var relationship = Assert.Single(diagnostics.Envelope.Children!.Values);
             Assert.Equal(ChildStatus.Pending, relationship.Status);
             Assert.IsType<StartWorkflow>(relationship.Command);
         }, TimeSpan.FromSeconds(10));

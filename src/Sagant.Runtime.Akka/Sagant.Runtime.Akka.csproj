@@ -17,6 +17,9 @@
     <!-- Pin transitive OpenTelemetry.Api to the CPM version; Akka.* pulls an older,
          vulnerable version and CentralPackageTransitivePinningEnabled is off (see NU1902). -->
     <PackageReference Include="OpenTelemetry.Api" />
+    <!-- Already pulled in transitively via Akka's own default json serializer; declared explicitly
+         because WorkflowRuntimeStateSerializer uses it directly. -->
+    <PackageReference Include="Newtonsoft.Json" />
   </ItemGroup>
 
   <ItemGroup>

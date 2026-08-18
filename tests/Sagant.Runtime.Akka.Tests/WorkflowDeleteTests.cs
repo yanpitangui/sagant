@@ -203,7 +203,7 @@ public class WorkflowDeleteTests : WorkflowActorTestKit
         {
             parentActor.Tell(new GetDiagnostics<TestState>(), TestActor);
             var diagnostics = ExpectMsg<Diagnostics<TestState>>();
-            var relationship = Assert.Single(diagnostics.Envelope.Children!);
+            var relationship = Assert.Single(diagnostics.Envelope.Children!.Values);
             Assert.Equal(childPersistenceId, relationship.ChildWorkflowId);
             Assert.Equal(ChildStatus.Cancelled, relationship.Status);
         }, TimeSpan.FromSeconds(10));

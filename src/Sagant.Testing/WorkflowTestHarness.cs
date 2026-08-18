@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Sagant.Execution;
 using Microsoft.Extensions.Time.Testing;
 using Sagant.Descriptors;
@@ -573,7 +574,7 @@ public sealed class WorkflowTestHarness<TWorkflow, TState>
     private string FindActiveChildGroup(string childWorkflowId, bool includeFinalized = false)
     {
         var groups = _envelope.ChildGroups ?? new Dictionary<string, ChildGroupState>();
-        var groupIds = (_envelope.Children ?? Array.Empty<ChildWorkflowRelationship>())
+        var groupIds = (_envelope.Children?.Values ?? Enumerable.Empty<ChildWorkflowRelationship>())
             .Where(child => child.ChildWorkflowId == childWorkflowId
                 && (includeFinalized || !groups[child.GroupId].Finalized))
             .Select(child => child.GroupId)
@@ -605,9 +606,9 @@ public sealed class WorkflowTestHarness<TWorkflow, TState>
             return;
         }
 
-        var children = (_envelope.Children ?? Array.Empty<ChildWorkflowRelationship>()).ToList();
-        var index = children.FindIndex(c => c.GroupId == groupId && c.ChildWorkflowId == childWorkflowId);
-        if (index < 0)
+        var children = _envelope.Children ?? ImmutableDictionary<string, ChildWorkflowRelationship>.Empty;
+        var relationship = children.Values.FirstOrDefault(c => c.GroupId == groupId && c.ChildWorkflowId == childWorkflowId);
+        if (relationship is null)
         {
             throw new InvalidOperationException($"Child '{childWorkflowId}' is not a member of group '{groupId}'.");
         }
@@ -623,14 +624,14 @@ public sealed class WorkflowTestHarness<TWorkflow, TState>
             _ => throw new InvalidOperationException(
                 $"Child '{childWorkflowId}' is {childHarness.Status}, not finished; run it to completion before delivering its lifecycle."),
         };
-        children[index] = children[index] with
+        children = children.SetItem(relationship.RelationshipId, relationship with
         {
             Status = childStatus,
             Result = childStatus == ChildStatus.Completed ? childHarness.StateObject : null,
             Failure = childHarness.Outcome is WorkflowOutcome.Failed f ? f.Cause : null,
-        };
+        });
 
-        var members = children.Where(c => c.GroupId == groupId).ToList();
+        var members = children.Values.Where(c => c.GroupId == groupId).ToList();
         var outcome = ChildGroupPolicy.EvaluateGroupOutcome(group, members);
         if (outcome is null)
         {
@@ -640,15 +641,9 @@ public sealed class WorkflowTestHarness<TWorkflow, TState>
 
         if (group.RemainingChildrenPolicy == RemainingChildrenPolicy.Terminate)
         {
-            var pendingIds = members.Where(c => c.Status is ChildStatus.Pending or ChildStatus.TerminationRequested)
-                .Select(c => c.RelationshipId).ToHashSet();
-            for (var i = 0; i < children.Count; i++)
-            {
-                if (pendingIds.Contains(children[i].RelationshipId))
-                {
-                    children[i] = children[i] with { Status = ChildStatus.TerminationRequested };
-                }
-            }
+            var pending = members.Where(c => c.Status is ChildStatus.Pending or ChildStatus.TerminationRequested);
+            children = children.SetItems(pending.Select(c =>
+                new KeyValuePair<string, ChildWorkflowRelationship>(c.RelationshipId, c with { Status = ChildStatus.TerminationRequested })));
         }
 
         _envelope = _envelope with

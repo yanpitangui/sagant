@@ -3,6 +3,7 @@ using Sagant.Descriptors;
 using Sagant.Effects;
 using Sagant.Protocol;
 using Sagant.Runtime.Akka.Clustering;
+using Sagant.Runtime.Akka.Serialization;
 using Akka.Actor;
 using Akka.Delivery;
 using Akka.TestKit;
@@ -18,7 +19,14 @@ namespace Sagant.Runtime.Akka.Tests.Support;
 /// </summary>
 public abstract class WorkflowActorTestKit : TestKit
 {
-    protected WorkflowActorTestKit(string config) : base(config)
+    /// <summary>
+    /// Every actor this kit creates uses <see cref="TestState"/>, and every one of them is built via
+    /// direct <c>Props.Create</c> (see <see cref="CreateActor(string, WorkflowScript, WorkflowSettings, TimeProvider, IActorRef, string, TimeSpan?, int, TimeSpan?)"/>
+    /// below), skipping <c>WithWorkflow</c> — so the serializer binding it would otherwise add gets
+    /// supplied here — see <see cref="WorkflowRuntimeStateSerializerSetup"/>.
+    /// </summary>
+    protected WorkflowActorTestKit(string config)
+        : base(WorkflowRuntimeStateSerializerSetup.HoconFor<TestState>() + "\n" + config)
     {
     }
 
@@ -415,7 +423,7 @@ public abstract class WorkflowActorTestKit : TestKit
     {
         actor.Tell(new GetDiagnostics<TestState>(), TestActor);
         var diagnostics = ExpectMsg<Diagnostics<TestState>>();
-        return Assert.Single(diagnostics.Envelope.Children!, child => child.ChildWorkflowId == childWorkflowId);
+        return Assert.Single(diagnostics.Envelope.Children!.Values, child => child.ChildWorkflowId == childWorkflowId);
     }
 
     /// <summary>
