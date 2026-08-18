@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Sagant.Execution;
 using Sagant.Protocol;
 using Sagant.Descriptors;
@@ -33,7 +34,8 @@ internal sealed class WorkflowRef<TWorkflow, TState>
         IReadOnlyDictionary<string, string>? metadata = null) where TCommand : notnull
     {
         var envelope = new WorkflowEnvelope(
-            EntityId, command, ReplyTo: null, IdempotencyKey: idempotencyKey, Metadata: metadata);
+            EntityId, command, ReplyTo: null, IdempotencyKey: idempotencyKey, Metadata: metadata,
+            TraceParent: Activity.Current?.Id);
         await _producerAdapter.Ask<Done>(new WorkflowProducerAdapter.Enqueue(EntityId, envelope));
     }
 
@@ -88,7 +90,8 @@ internal sealed class WorkflowRef<TWorkflow, TState>
 
         try
         {
-            var envelope = new WorkflowEnvelope(EntityId, command, waiterRef, idempotencyKey, Metadata: metadata);
+            var envelope = new WorkflowEnvelope(
+                EntityId, command, waiterRef, idempotencyKey, Metadata: metadata, TraceParent: Activity.Current?.Id);
             await _producerAdapter.Ask<Done>(new WorkflowProducerAdapter.Enqueue(EntityId, envelope), timeout, cancellationToken);
 
             try
@@ -183,7 +186,8 @@ internal sealed class WorkflowRef<TWorkflow, TState>
     /// </summary>
     public async Task<WorkflowResult<TState>> RunAndAwaitResult(object command, TimeSpan timeout, string? idempotencyKey = null, CancellationToken cancellationToken = default)
     {
-        var envelope = new WorkflowEnvelope(EntityId, command, ReplyTo: null, IdempotencyKey: idempotencyKey);
+        var envelope = new WorkflowEnvelope(
+            EntityId, command, ReplyTo: null, IdempotencyKey: idempotencyKey, TraceParent: Activity.Current?.Id);
         await _producerAdapter.Ask<Done>(new WorkflowProducerAdapter.Enqueue(EntityId, envelope), timeout, cancellationToken);
         return await _shardRegion.Ask<WorkflowResult<TState>>(new WorkflowEnvelope(EntityId, new WatchForCompletion<TState>()), timeout, cancellationToken);
     }

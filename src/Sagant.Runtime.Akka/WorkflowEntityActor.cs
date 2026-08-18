@@ -552,7 +552,7 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         var effect = descriptor.Invoke(
             _workflow, _envelope.UserState, envelope.Message, _entityId,
             _tracing.ResolveParentContext(),
-            _tracing.ConsumeParentLink(_envelope.LastTraceParent, envelope.ParentRelationship),
+            _tracing.ConsumeParentLink(_envelope.LastTraceParent, envelope.ParentRelationship?.TraceParent ?? envelope.TraceParent),
             a =>
             {
                 activity = a;

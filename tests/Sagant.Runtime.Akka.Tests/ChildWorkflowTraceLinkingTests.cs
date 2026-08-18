@@ -154,6 +154,36 @@ public class ChildWorkflowTraceLinkingTests : WorkflowActorTestKit, IDisposable
         }, TimeSpan.FromSeconds(10));
     }
 
+    /// <summary>G11: an ordinary business command sent through <see cref="WorkflowRef{TWorkflow,TState}"/>
+    /// links a fresh entity's first activity back to whatever the sender's own ambient
+    /// <see cref="Activity.Current"/> was — same mechanism as a spawned child, just sourced from
+    /// <c>WorkflowEnvelope.TraceParent</c> instead of <c>ChildWorkflowRelationship.TraceParent</c>.</summary>
+    [Fact]
+    public async Task SendThroughWorkflowRef_LinksFirstActivityBackToSendersAmbientActivity()
+    {
+        const string persistenceId = nameof(SendThroughWorkflowRef_LinksFirstActivityBackToSendersAmbientActivity);
+        var actor = CreateActor(persistenceId, Script()
+            .Step("Run", (state, _) => Task.FromResult(new StepEffectsBuilder<TestState>().UpdateState(state).ThenComplete()))
+            .Command<StartWorkflow>((_, _) => new EffectsBuilder<TestState>().TransitionTo(Step("Run")).ThenReply("accepted")));
+
+        var relay = Sys.ActorOf(Props.Create(() => new RelayProducerAdapter(actor)));
+        var workflowRef = new WorkflowRef<ScriptableWorkflow, TestState>(ActorRefs.Nobody, relay, persistenceId);
+
+        // Starts on WorkflowDiagnostics.ActivitySource, the one source the test's own listener
+        // (constructor above) samples — the same source every real caller's ambient activity would
+        // actually be on, since a realistic sender here is another workflow's own step/command span.
+        using var sender = WorkflowDiagnostics.ActivitySource.StartActivity("caller-span", ActivityKind.Internal);
+
+        await workflowRef.Send(new StartWorkflow(1));
+
+        AwaitAssert(() =>
+        {
+            var first = Assert.Single(_capturedActivities, a =>
+                (string?)a.GetTagItem("workflow.persistence_id") == persistenceId && a.OperationName.EndsWith("StartWorkflow"));
+            Assert.Contains(first.Links, l => l.Context.TraceId == sender!.TraceId);
+        }, TimeSpan.FromSeconds(10));
+    }
+
     [Fact]
     public void ResumeStep_LinksToATerminatedMembersFinalTrace_SameAsCompletedOrFailed()
     {

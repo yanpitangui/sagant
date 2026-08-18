@@ -269,6 +269,15 @@ route leads back out of it — a business-command step transition, a pause timeo
 restarting, or an operator `Terminate` — records `sagant.workflow.pause.duration` against that instant
 once, right where it also reports the status change itself.
 
+**O4 — A fresh instance links back to whatever sent its first command.**
+`WorkflowRef.Send`/`Ask`/`RunAndAwaitResult` capture the sender's own ambient `Activity.Current` onto
+`WorkflowEnvelope.TraceParent` as the command leaves. A fresh entity's very first activity links back
+to it the same way a spawned child already links back to the step that started it (guarantee O1's
+one-trace-per-run extends across an ordinary `Send`/`Request`, not just `AwaitChildren`) — so a
+workflow started by another workflow, or by any caller with an ambient trace, reads as one trace with
+whatever sent it. Fires once, gated the same way a child's first-activity link is: only before this
+entity's very first activity has ever completed.
+
 
 ---
 

@@ -466,7 +466,14 @@ public abstract class WorkflowActorTestKit : TestKit
         public RelayProducerAdapter(IActorRef target)
         {
             Receive<WorkflowProducerAdapter.Enqueue>(msg =>
-                target.Tell(new ConsumerController.Delivery<WorkflowEnvelope>(msg.Envelope, Self, "relay-producer", ++_seqNr)));
+            {
+                var replyTo = Sender;
+                target.Tell(new ConsumerController.Delivery<WorkflowEnvelope>(msg.Envelope, Self, "relay-producer", ++_seqNr));
+                // Acks the enqueue itself, same as the real ShardingProducerController does — only
+                // WorkflowRef.Send/Ask/RunAndAwaitResult actually Ask<Done> on this; AwaitChildren's
+                // own child-start is a bare Tell and never waits on it.
+                replyTo.Tell(Done.Instance);
+            });
             Receive<ConsumerController.Confirmed>(_ => { });
         }
     }

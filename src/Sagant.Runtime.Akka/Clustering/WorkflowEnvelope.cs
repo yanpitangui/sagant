@@ -39,4 +39,17 @@ public sealed record WorkflowEnvelope(
     /// Caller-supplied context travelling with this command, recorded against whatever it causes.
     /// Opaque to the engine — see <c>IWorkflowHandle.Send</c>.
     /// </summary>
-    IReadOnlyDictionary<string, string>? Metadata = null);
+    IReadOnlyDictionary<string, string>? Metadata = null,
+
+    /// <summary>
+    /// The sender's own ambient <c>Activity.Current</c> at the moment this command left
+    /// <c>WorkflowRef</c> — <c>null</c> when nothing was listening. Consumed the same way
+    /// <see cref="ChildWorkflowRelationship.TraceParent"/> already is: a fresh entity's very first
+    /// activity links back to it (see <c>StepTracingContext.ConsumeParentLink</c>), so a workflow
+    /// started by an ordinary <c>Send</c>/<c>Request</c> reads as one trace with whatever sent it,
+    /// the same as a child spawned through <c>AwaitChildren</c> already does. Set only by
+    /// <c>WorkflowRef.Send</c>/<c>Ask</c>/<c>RunAndAwaitResult</c> — the plain <c>Tell</c>/<c>Ask</c>
+    /// control-command lane (<c>Suspend</c>/<c>Resume</c>/<c>Terminate</c>/<c>GetStatus</c>) and
+    /// <c>Query</c> leave it <c>null</c>, since none of them can be a workflow's first command.
+    /// </summary>
+    string? TraceParent = null);
