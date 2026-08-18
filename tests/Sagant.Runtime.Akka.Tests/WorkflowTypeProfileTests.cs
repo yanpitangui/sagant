@@ -57,9 +57,9 @@ public class WorkflowTypeProfileTests
         var profile = WorkflowTypeProfile<EchoState>.For(new ProfiledWorkflow(), ConfigWithHandoff("60s"));
 
         Assert.Equal(3, profile.EmptySeqNrLedger.Capacity);
-        Assert.Empty(profile.EmptySeqNrLedger.Entries);
+        Assert.Equal(0, profile.EmptySeqNrLedger.Count);
         Assert.Equal(11, profile.EmptyIdempotencyLedger.Capacity);
-        Assert.Empty(profile.EmptyIdempotencyLedger.Entries);
+        Assert.Equal(0, profile.EmptyIdempotencyLedger.Count);
     }
 
     /// <summary>

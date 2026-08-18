@@ -1,8 +1,8 @@
 namespace Sagant.Protocol;
 
 /// <summary>
-/// Bounded, immutable dedup ledger for transport-level redelivery — a fixed-size ring buffer of
-/// (producer id, highest applied sequence number) pairs, oldest evicted first once at capacity.
+/// Bounded, immutable dedup ledger for transport-level redelivery — a fixed-capacity, copy-on-write
+/// buffer of (producer id, highest applied sequence number) pairs, oldest evicted first once full.
 /// Persisted as part of <see cref="WorkflowRuntimeState{TState}"/> so a redelivered seqNr at or below
 /// the recorded value is recognized as a genuine duplicate without re-invoking the handler. Which
 /// runtime, if any, actually produces redelivery is not this core layer's concern — see the runtime
@@ -22,24 +22,35 @@ namespace Sagant.Protocol;
 /// genuinely-stale producers still age out. (<see cref="Idempotency.IdempotencyLedger.Record"/> keeps
 /// a re-recorded key's original position — see that method's own doc comment for why the two ledgers
 /// differ there.)
+///
+/// Backed by two arrays, oldest-first, holding exactly what is currently recorded — <see cref="Record"/>
+/// finds the touched producer with a plain indexed scan and writes a new pair of arrays sized to what
+/// the result actually holds. At the capacities this ledger runs at (a handful to a few dozen
+/// entries), that scan-and-copy costs less than a dictionary's own hashing and rehashing.
 /// </summary>
 public sealed class SeqNrLedger
 {
     public int Capacity { get; }
 
-    /// <summary>Oldest first.</summary>
-    public IReadOnlyList<string> Order { get; }
+    /// <summary>How many entries are currently recorded, at most <see cref="Capacity"/>.</summary>
+    public int Count { get; }
 
-    public IReadOnlyDictionary<string, long> Entries { get; }
+    /// <summary>Oldest first, for indices <c>[0, Count)</c>.</summary>
+    public IReadOnlyList<string> ProducerIds { get; }
+
+    /// <summary><see cref="ProducerIds"/>[i]'s recorded sequence number is this list's same index,
+    /// for i in <c>[0, Count)</c>.</summary>
+    public IReadOnlyList<long> SeqNrs { get; }
 
     /// <summary><see cref="Empty"/> and <see cref="Record"/> are the intended way to construct a
     /// sensible instance — this constructor exists so a serializer pairing public properties with a
     /// matching constructor can rehydrate this type directly.</summary>
-    public SeqNrLedger(int capacity, IReadOnlyList<string> order, IReadOnlyDictionary<string, long> entries)
+    public SeqNrLedger(int capacity, IReadOnlyList<string> producerIds, IReadOnlyList<long> seqNrs, int count)
     {
         Capacity = capacity;
-        Order = order;
-        Entries = entries;
+        ProducerIds = producerIds;
+        SeqNrs = seqNrs;
+        Count = count;
     }
 
     public static SeqNrLedger Empty(int capacity)
@@ -50,10 +61,23 @@ public sealed class SeqNrLedger
                 "SeqNr dedup ledger capacity must be positive — a non-positive capacity would silently disable dedup.");
         }
 
-        return new SeqNrLedger(capacity, Array.Empty<string>(), new Dictionary<string, long>());
+        return new SeqNrLedger(capacity, Array.Empty<string>(), Array.Empty<long>(), 0);
     }
 
-    public bool TryGetHighest(string producerId, out long seqNr) => Entries.TryGetValue(producerId, out seqNr);
+    public bool TryGetHighest(string producerId, out long seqNr)
+    {
+        for (var i = 0; i < Count; i++)
+        {
+            if (ProducerIds[i] == producerId)
+            {
+                seqNr = SeqNrs[i];
+                return true;
+            }
+        }
+
+        seqNr = default;
+        return false;
+    }
 
     /// <summary>
     /// Returns a new ledger with <paramref name="producerId"/> recorded against <paramref name="seqNr"/>,
@@ -62,16 +86,37 @@ public sealed class SeqNrLedger
     /// </summary>
     public SeqNrLedger Record(string producerId, long seqNr)
     {
-        var newOrder = Order.Where(id => id != producerId).Append(producerId).ToList();
-        var newEntries = new Dictionary<string, long>(Entries) { [producerId] = seqNr };
-
-        if (newOrder.Count > Capacity)
+        var existingIndex = -1;
+        for (var i = 0; i < Count; i++)
         {
-            var oldest = newOrder[0];
-            newOrder.RemoveAt(0);
-            newEntries.Remove(oldest);
+            if (ProducerIds[i] == producerId)
+            {
+                existingIndex = i;
+                break;
+            }
         }
 
-        return new SeqNrLedger(Capacity, newOrder, newEntries);
+        var dropOldest = existingIndex < 0 && Count == Capacity;
+        var newIds = new string[Math.Min(Count + 1, Capacity)];
+        var newSeqNrs = new long[newIds.Length];
+
+        var writeIndex = 0;
+        for (var i = dropOldest ? 1 : 0; i < Count; i++)
+        {
+            if (i == existingIndex)
+            {
+                continue;
+            }
+
+            newIds[writeIndex] = ProducerIds[i];
+            newSeqNrs[writeIndex] = SeqNrs[i];
+            writeIndex++;
+        }
+
+        newIds[writeIndex] = producerId;
+        newSeqNrs[writeIndex] = seqNr;
+        writeIndex++;
+
+        return new SeqNrLedger(Capacity, newIds, newSeqNrs, writeIndex);
     }
 }
