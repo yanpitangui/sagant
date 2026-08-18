@@ -39,6 +39,7 @@ public static class WorkflowEventFold
                 PauseDeadline = null,
                 PauseTimeoutStepName = null,
                 PausedAt = null,
+                HeldAt = null,
                 HoldDeadline = null,
                 HoldTimeoutStepName = null,
                 RetryDelayUntil = null,
@@ -77,6 +78,7 @@ public static class WorkflowEventFold
                 PauseDeadline = null,
                 PauseTimeoutStepName = null,
                 PausedAt = null,
+                HeldAt = null,
                 HoldDeadline = null,
                 HoldTimeoutStepName = null,
                 RetryDelayUntil = null,
@@ -95,6 +97,7 @@ public static class WorkflowEventFold
                 PauseDeadline = null,
                 PauseTimeoutStepName = null,
                 PausedAt = null,
+                HeldAt = null,
                 HoldDeadline = null,
                 HoldTimeoutStepName = null,
                 RetryDelayUntil = null,
@@ -116,6 +119,7 @@ public static class WorkflowEventFold
                 PauseDeadline = null,
                 PauseTimeoutStepName = null,
                 PausedAt = null,
+                HeldAt = null,
                 HoldDeadline = null,
                 HoldTimeoutStepName = null,
                 RetryDelayUntil = null,
@@ -129,6 +133,7 @@ public static class WorkflowEventFold
             WorkflowEvent.RunSuspended e => envelope with
             {
                 Status = WorkflowStatus.Suspended,
+                HeldAt = e.HeldAt,
                 HoldDeadline = e.HoldDeadline,
                 HoldTimeoutStepName = e.HoldTimeoutStepName,
             },
@@ -141,6 +146,7 @@ public static class WorkflowEventFold
                 ParkedFailure = e.Failure,
                 StepDeadline = null,
                 RetryDelayUntil = null,
+                HeldAt = e.HeldAt,
                 HoldDeadline = e.HoldDeadline,
                 HoldTimeoutStepName = e.HoldTimeoutStepName,
                 LastTraceParent = e.TraceParent ?? envelope.LastTraceParent,
@@ -155,6 +161,7 @@ public static class WorkflowEventFold
                 // The run is live again, whatever comes of the retry, and the hold it was under is
                 // over — so whatever that hold was waiting for stops waiting too.
                 ParkedFailure = null,
+                HeldAt = null,
                 HoldDeadline = null,
                 HoldTimeoutStepName = null,
             },

@@ -516,6 +516,62 @@ public class WorkflowGuaranteeTests
         Assert.Empty(stillRunning.AfterPersist.OfType<WorkflowDecision.RecordPauseDuration>());
     }
 
+    // ── O5 ───────────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void O5_LeavingSuspended_RecordsHowLongItWaited()
+    {
+        var suspended = Next(FreshEnvelope(), WorkflowTransitionPlanner.PlanUnknownStep("Charge"), now: Now);
+
+        var resumedAt = Now + TimeSpan.FromMinutes(5);
+        var resume = Assert.IsType<ControlPlan<OrderState>.Apply>(
+            WorkflowTransitionPlanner.PlanResume(suspended, resumedAt, Settings(), TestCause));
+
+        var recorded = Assert.Single(resume.AfterPersist.OfType<WorkflowDecision.RecordSuspendedDuration>());
+        Assert.Equal(TimeSpan.FromMinutes(5), recorded.Duration);
+    }
+
+    /// <summary><see cref="WorkflowTransitionPlanner.PlanTerminate{TState}"/> never reaches
+    /// <c>BuildDecisions</c> — it builds its own decisions directly, the same as it does leaving
+    /// Paused (O3).</summary>
+    [Fact]
+    public void O5_TerminatingFromSuspended_RecordsHowLongItWaited()
+    {
+        var suspended = Next(FreshEnvelope(), WorkflowTransitionPlanner.PlanUnknownStep("Charge"), now: Now);
+
+        var terminatedAt = Now + TimeSpan.FromHours(1);
+        var plan = (ControlPlan<OrderState>.Apply)WorkflowTransitionPlanner.PlanTerminate(
+            suspended, "operator stopped it", terminatedAt, TestCause);
+
+        var recorded = Assert.Single(plan.AfterPersist.OfType<WorkflowDecision.RecordSuspendedDuration>());
+        Assert.Equal(TimeSpan.FromHours(1), recorded.Duration);
+    }
+
+    /// <summary>A hold timeout's own step is an ordinary <see cref="Transition.StepTransition"/>,
+    /// reaching <c>BuildDecisions</c> the same generic way a business-command exit from Paused
+    /// does.</summary>
+    [Fact]
+    public void O5_HoldTimeoutStep_RecordsHowLongItWaited()
+    {
+        var suspended = Next(FreshEnvelope(), WorkflowTransitionPlanner.PlanUnknownStep("Charge"), now: Now);
+
+        var releasedAt = Now + TimeSpan.FromDays(1);
+        var plan = Plan(suspended, new Transition.StepTransition("OnAbandoned", null), now: releasedAt);
+
+        var recorded = Assert.Single(plan.AfterPersist.OfType<WorkflowDecision.RecordSuspendedDuration>());
+        Assert.Equal(TimeSpan.FromDays(1), recorded.Duration);
+    }
+
+    /// <summary>The duration is measured on the way out of a hold — mirrors
+    /// <see cref="O3_EnteringAPause_RecordsNoDuration"/>.</summary>
+    [Fact]
+    public void O5_EnteringSuspended_RecordsNoDuration()
+    {
+        var plan = Plan(FreshEnvelope(), WorkflowTransitionPlanner.PlanUnknownStep("Charge"));
+
+        Assert.Empty(plan.AfterPersist.OfType<WorkflowDecision.RecordSuspendedDuration>());
+    }
+
     // ── E1 ───────────────────────────────────────────────────────────────────────────────────────
 
     [Fact]

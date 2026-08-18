@@ -116,8 +116,8 @@ public class WorkflowDeadlineFoldTests
     {
         foreach (var held in new WorkflowEvent[]
                  {
-                     new WorkflowEvent.RunSuspended(TestCause),
-                     new WorkflowEvent.RunParked(new WorkflowFailure("stuck"), null, TestCause),
+                     new WorkflowEvent.RunSuspended(TestCause, Now),
+                     new WorkflowEvent.RunParked(new WorkflowFailure("stuck"), null, TestCause, Now),
                  })
         {
             Assert.All(
@@ -135,9 +135,9 @@ public class WorkflowDeadlineFoldTests
     {
         foreach (var held in new WorkflowEvent[]
                  {
-                     new WorkflowEvent.RunSuspended(TestCause, Now.AddDays(3), "OnAbandoned"),
+                     new WorkflowEvent.RunSuspended(TestCause, Now, Now.AddDays(3), "OnAbandoned"),
                      new WorkflowEvent.RunParked(
-                         new WorkflowFailure("stuck"), null, TestCause, Now.AddDays(3), "OnAbandoned"),
+                         new WorkflowFailure("stuck"), null, TestCause, Now, Now.AddDays(3), "OnAbandoned"),
                  })
         {
             var arm = Assert.Single(
@@ -188,8 +188,8 @@ public class WorkflowDeadlineFoldTests
         {
             new WorkflowEvent.WorkflowDeadlineSet(Now.AddHours(2)),
             new WorkflowEvent.StepStarted("Charge", null, Now.AddSeconds(5), null, TestCause),
-            new WorkflowEvent.RunParked(new WorkflowFailure("gateway down"), null, TestCause),
-            new WorkflowEvent.RunSuspended(TestCause),
+            new WorkflowEvent.RunParked(new WorkflowFailure("gateway down"), null, TestCause, Now),
+            new WorkflowEvent.RunSuspended(TestCause, Now),
             new WorkflowEvent.RunResumed(Now.AddSeconds(35), TestCause),
             new WorkflowEvent.RunFinished(WorkflowOutcome.Completed.Instance, null, TestCause),
         },
@@ -214,7 +214,7 @@ public class WorkflowDeadlineFoldTests
         {
             new WorkflowEvent.WorkflowDeadlineSet(Now.AddHours(4)),
             new WorkflowEvent.StepStarted("Charge", null, Now.AddSeconds(5), null, TestCause),
-            new WorkflowEvent.RunSuspended(TestCause, Now.AddDays(3), "OnAbandoned"),
+            new WorkflowEvent.RunSuspended(TestCause, Now, Now.AddDays(3), "OnAbandoned"),
             new WorkflowEvent.RunResumed(Now.AddSeconds(35), TestCause),
             new WorkflowEvent.RunFinished(WorkflowOutcome.Completed.Instance, null, TestCause),
         },
@@ -223,7 +223,7 @@ public class WorkflowDeadlineFoldTests
         {
             new WorkflowEvent.StepStarted("Charge", null, Now.AddSeconds(5), null, TestCause),
             new WorkflowEvent.RunParked(
-                new WorkflowFailure("gateway down"), null, TestCause, Now.AddDays(3), "OnAbandoned"),
+                new WorkflowFailure("gateway down"), null, TestCause, Now, Now.AddDays(3), "OnAbandoned"),
             new WorkflowEvent.StepStarted("OnAbandoned", null, null, null, TestCause),
             new WorkflowEvent.RunFinished(
                 new WorkflowOutcome.Failed(new WorkflowFailure("abandoned")), null, TestCause),
@@ -232,7 +232,7 @@ public class WorkflowDeadlineFoldTests
         new WorkflowEvent[]
         {
             new WorkflowEvent.RunPaused("awaiting approval", Now, Now.AddDays(7), "OnTimeout", null, TestCause),
-            new WorkflowEvent.RunSuspended(TestCause, Now.AddDays(1), "OnAbandoned"),
+            new WorkflowEvent.RunSuspended(TestCause, Now, Now.AddDays(1), "OnAbandoned"),
             new WorkflowEvent.RunResumed(Now.AddSeconds(30), TestCause),
         },
         // Two groups awaited at once, each with its own wait, resolving one at a time.

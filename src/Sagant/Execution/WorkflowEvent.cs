@@ -123,12 +123,16 @@ public abstract record WorkflowEvent
 
     /// <summary>An operator held the instance. The current step name and input stay put, so a later
     /// resume knows what to re-execute.</summary>
+    /// <param name="HeldAt">The absolute instant this happened, computed at write time — what
+    /// <see cref="WorkflowDecision.RecordSuspendedDuration"/> measures against once the instance
+    /// leaves <c>Suspended</c>, however it leaves.</param>
     /// <param name="HoldDeadline">The absolute instant this hold stops waiting, computed at write
     /// time. <c>null</c> for a hold released by a command alone.</param>
     /// <param name="HoldTimeoutStepName">The step run when <paramref name="HoldDeadline"/> passes.
     /// </param>
     public sealed record RunSuspended(
         TransitionCause Cause,
+        DateTimeOffset HeldAt,
         DateTimeOffset? HoldDeadline = null,
         string? HoldTimeoutStepName = null) : CausedEvent(Cause);
 
@@ -138,6 +142,8 @@ public abstract record WorkflowEvent
     /// <c>Suspended</c> status an operator hold reaches, and resumes the same way — the difference is
     /// that this one carries a reason a reader can act on.
     /// </summary>
+    /// <param name="HeldAt">Same role as <see cref="RunSuspended.HeldAt"/> — the absolute instant this
+    /// park began.</param>
     /// <param name="HoldDeadline">The absolute instant this park stops waiting, computed at write
     /// time. <c>null</c> for a park that waits for an operator however long that takes.</param>
     /// <param name="HoldTimeoutStepName">The step run when <paramref name="HoldDeadline"/> passes.
@@ -146,6 +152,7 @@ public abstract record WorkflowEvent
         WorkflowFailure Failure,
         string? TraceParent,
         TransitionCause Cause,
+        DateTimeOffset HeldAt,
         DateTimeOffset? HoldDeadline = null,
         string? HoldTimeoutStepName = null) : CausedEvent(Cause);
 

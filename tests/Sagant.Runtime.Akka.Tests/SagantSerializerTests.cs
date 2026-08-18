@@ -93,8 +93,8 @@ public class SagantSerializerTests
         yield return [new WorkflowEvent.RunFinished(WorkflowOutcome.Completed.Instance, null, cause)];
         yield return [new WorkflowEvent.RunDeleted(null, cause)];
         yield return [new WorkflowEvent.RunRestarted("Step", null, "reason", null, null, cause)];
-        yield return [new WorkflowEvent.RunSuspended(cause)];
-        yield return [new WorkflowEvent.RunParked(failure, null, cause)];
+        yield return [new WorkflowEvent.RunSuspended(cause, DateTimeOffset.UtcNow)];
+        yield return [new WorkflowEvent.RunParked(failure, null, cause, DateTimeOffset.UtcNow)];
         yield return [new WorkflowEvent.RunResumed(null, cause)];
         // .ToList() deliberately: a bare collection expression like [relationship] compiles to a
         // compiler-internal single-element list type Newtonsoft can write but cannot read back.

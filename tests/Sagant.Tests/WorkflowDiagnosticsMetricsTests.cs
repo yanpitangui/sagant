@@ -239,6 +239,26 @@ public class WorkflowDiagnosticsMetricsTests
         Assert.Equal(TimeSpan.FromMinutes(15).TotalSeconds, (double)m.Value);
     }
 
+    /// <summary>O5, the <c>Suspended</c> counterpart to the pause-duration test above — an operator
+    /// hold, released by an operator <c>Resume</c>.</summary>
+    [Fact]
+    public async Task Harness_LeavingSuspendedViaOperatorResume_RecordsSuspendedDuration()
+    {
+        var (listener, measurements) = Listen();
+        using var _ = listener;
+
+        var timeProvider = new FakeTimeProvider();
+        var harness = new WorkflowTestHarness<PauseEndWorkflow, CounterState>(new PauseEndWorkflow(), timeProvider: timeProvider);
+        harness.RunCommand(new Begin());
+        harness.Suspend();
+
+        timeProvider.Advance(TimeSpan.FromMinutes(20));
+        await harness.Resume();
+
+        var m = Assert.Single(For(measurements, "sagant.workflow.suspended.duration"));
+        Assert.Equal(TimeSpan.FromMinutes(20).TotalSeconds, (double)m.Value);
+    }
+
     [Fact]
     public async Task Harness_CompletingRun_RecordsFinishedTaggedCompleted()
     {

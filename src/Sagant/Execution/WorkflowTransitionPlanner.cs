@@ -118,7 +118,7 @@ public static class WorkflowTransitionPlanner
 
             case Transition.ParkTransition park:
                 events.Add(new WorkflowEvent.RunParked(
-                    park.Failure, lastTraceParent, cause,
+                    park.Failure, lastTraceParent, cause, now,
                     HoldDeadlineFor(settings, now), settings.HoldTimeoutStepName));
                 break;
 
@@ -321,7 +321,7 @@ public static class WorkflowTransitionPlanner
         }
 
         return new ControlPlan<TState>.Apply(
-            new WorkflowEvent[] { new WorkflowEvent.RunSuspended(cause, holdDeadline, settings.HoldTimeoutStepName) },
+            new WorkflowEvent[] { new WorkflowEvent.RunSuspended(cause, now, holdDeadline, settings.HoldTimeoutStepName) },
             decisions);
     }
 
@@ -344,6 +344,13 @@ public static class WorkflowTransitionPlanner
         {
             WorkflowDecision.RecordStatusChange.For(WorkflowStatus.Running),
         };
+
+        // This builds its own decisions directly, same as PlanTerminate below, so it reports this
+        // duration itself — the primary route out of Suspended.
+        if (envelope.HeldAt is { } heldAt)
+        {
+            decisions.Add(new WorkflowDecision.RecordSuspendedDuration(now - heldAt));
+        }
 
         if (envelope.CurrentStepName is not null)
         {
@@ -384,11 +391,16 @@ public static class WorkflowTransitionPlanner
             new WorkflowDecision.RecordOutcome(outcome),
         };
 
-        // The one route out of Paused that never reaches BuildDecisions — a Terminate lands here
-        // directly, so this is the one other place that duration is reported from.
+        // A route out of Paused/Suspended that never reaches BuildDecisions — a Terminate lands here
+        // directly, so this is the other place either duration is reported from (alongside PlanResume
+        // for the Suspended side).
         if (envelope.Status == WorkflowStatus.Paused && envelope.PausedAt is { } pausedAt)
         {
             decisions.Add(new WorkflowDecision.RecordPauseDuration(now - pausedAt));
+        }
+        else if (envelope.Status == WorkflowStatus.Suspended && envelope.HeldAt is { } heldAt)
+        {
+            decisions.Add(new WorkflowDecision.RecordSuspendedDuration(now - heldAt));
         }
         foreach (var child in childrenToClose)
         {
@@ -495,6 +507,14 @@ public static class WorkflowTransitionPlanner
             if (previous.Status == WorkflowStatus.Paused && previous.PausedAt is { } pausedAt)
             {
                 decisions.Add(new WorkflowDecision.RecordPauseDuration(now - pausedAt));
+            }
+
+            // Same shape for Suspended: covers a hold timeout's step, ending, deleting, restarting.
+            // PlanResume and PlanTerminate are the two routes out that never reach here, and each
+            // reports this duration itself.
+            if (previous.Status == WorkflowStatus.Suspended && previous.HeldAt is { } heldAt)
+            {
+                decisions.Add(new WorkflowDecision.RecordSuspendedDuration(now - heldAt));
             }
         }
 

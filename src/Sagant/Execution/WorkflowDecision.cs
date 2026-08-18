@@ -79,6 +79,11 @@ public abstract record WorkflowDecision
     /// timeout, ending, deleting, restarting, or an operator <c>Terminate</c>.</summary>
     public sealed record RecordPauseDuration(TimeSpan Duration) : WorkflowDecision;
 
+    /// <summary>The instance left <see cref="WorkflowStatus.Suspended"/>; report how long it waited —
+    /// the <c>Suspended</c> counterpart to <see cref="RecordPauseDuration"/>. Covers an operator hold
+    /// and a parked failure alike, since both reach the same status.</summary>
+    public sealed record RecordSuspendedDuration(TimeSpan Duration) : WorkflowDecision;
+
     /// <summary>Arm a live timer for a deadline the envelope now carries.</summary>
     /// <param name="Discriminator">Which deadline of <paramref name="Kind"/>, for a kind an instance
     /// holds several of. The group id for <see cref="WorkflowTimerKind.ChildGroup"/>, <c>null</c>

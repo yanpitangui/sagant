@@ -266,6 +266,29 @@ public class WorkflowMetricsTests : WorkflowActorTestKit, IDisposable
         AwaitAssert(() => Assert.Single(For(persistenceId, "sagant.workflow.resumed")), TimeSpan.FromSeconds(10));
     }
 
+    /// <summary>O5, the <c>Suspended</c> counterpart to <see cref="PauseThenBusinessResume_RecordsPauseDuration"/>.</summary>
+    [Fact]
+    public void SuspendThenResume_RecordsSuspendedDuration()
+    {
+        var neverCompletes = new TaskCompletionSource<StepEffect<TestState>>();
+        var script = Script()
+            .Step("SlowStep", (_, _) => neverCompletes.Task)
+            .Command<StartWorkflow>((_, _) => new EffectsBuilder<TestState>().TransitionTo(Step("SlowStep")).ThenReply("accepted"));
+
+        const string persistenceId = nameof(SuspendThenResume_RecordsSuspendedDuration);
+        var actor = CreateActor(persistenceId, script, workflowTypeName: persistenceId);
+        actor.Tell(new StartWorkflow(1), TestActor);
+        ExpectMsg<string>();
+
+        actor.Tell(new Suspend(), TestActor);
+        ExpectMsg<Done>();
+
+        actor.Tell(new Resume(), TestActor);
+        ExpectMsg<Done>();
+
+        AwaitAssert(() => Assert.Single(For(persistenceId, "sagant.workflow.suspended.duration")), TimeSpan.FromSeconds(10));
+    }
+
     [Fact]
     public void Terminate_RecordsFinishedTaggedTerminated()
     {

@@ -437,6 +437,9 @@ public sealed class WorkflowTestHarness<TWorkflow, TState>
                 case WorkflowDecision.RecordPauseDuration rpd:
                     WorkflowDiagnostics.RecordPauseDuration(Workflow.WorkflowTypeName, rpd.Duration);
                     break;
+                case WorkflowDecision.RecordSuspendedDuration rsd:
+                    WorkflowDiagnostics.RecordSuspendedDuration(Workflow.WorkflowTypeName, rsd.Duration);
+                    break;
                 case WorkflowDecision.RecordOutcome ro:
                     WorkflowDiagnostics.RecordOutcome(Workflow.WorkflowTypeName, ro.Outcome);
                     break;
@@ -481,6 +484,9 @@ public sealed class WorkflowTestHarness<TWorkflow, TState>
                     break;
                 case WorkflowDecision.RecordPauseDuration rpd:
                     WorkflowDiagnostics.RecordPauseDuration(Workflow.WorkflowTypeName, rpd.Duration);
+                    break;
+                case WorkflowDecision.RecordSuspendedDuration rsd:
+                    WorkflowDiagnostics.RecordSuspendedDuration(Workflow.WorkflowTypeName, rsd.Duration);
                     break;
                 case WorkflowDecision.RecordOutcome ro:
                     WorkflowDiagnostics.RecordOutcome(Workflow.WorkflowTypeName, ro.Outcome);

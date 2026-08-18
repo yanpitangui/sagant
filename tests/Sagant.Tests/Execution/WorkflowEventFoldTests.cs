@@ -93,7 +93,7 @@ public class WorkflowEventFoldTests
                 new WorkflowEvent.StepStarted("Await", null, null, null, TestCause),
                 new WorkflowEvent.RunPaused("awaiting approval", Now, Now.AddHours(24), "AutoCancel", "trace-3", TestCause),
                 new WorkflowEvent.StepStarted("Charge", null, Now.AddSeconds(5), null, TestCause),
-                new WorkflowEvent.RunSuspended(TestCause),
+                new WorkflowEvent.RunSuspended(TestCause, Now),
                 new WorkflowEvent.RunResumed(Now.AddSeconds(5), TestCause),
             },
             // a child group start to finish
@@ -184,6 +184,39 @@ public class WorkflowEventFoldTests
         Assert.Null(envelope.PausedAt);
     }
 
+    /// <summary>O5: <c>RunSuspended</c>'s counterpart to <c>RunPaused_SetsPausedAt</c>.</summary>
+    [Fact]
+    public void RunSuspended_SetsHeldAt()
+    {
+        var envelope = WorkflowEventFold.Apply(Fresh(), new WorkflowEvent.RunSuspended(TestCause, Now));
+
+        Assert.Equal(Now, envelope.HeldAt);
+    }
+
+    /// <summary>A park is the exhausted-budget route into the same <c>Suspended</c> status an
+    /// operator hold reaches, and it sets <c>HeldAt</c> the same way.</summary>
+    [Fact]
+    public void RunParked_SetsHeldAt()
+    {
+        var envelope = WorkflowEventFold.Apply(
+            Fresh(), new WorkflowEvent.RunParked(new WorkflowFailure("stuck"), null, TestCause, Now));
+
+        Assert.Equal(Now, envelope.HeldAt);
+    }
+
+    /// <summary>Same reasoning as <c>LeavingAPause_ClearsPausedAt</c>, for the Suspended side.</summary>
+    [Fact]
+    public void LeavingSuspended_ClearsHeldAt()
+    {
+        var envelope = WorkflowEventFold.ApplyAll(Fresh(), new WorkflowEvent[]
+        {
+            new WorkflowEvent.RunSuspended(TestCause, Now),
+            new WorkflowEvent.RunResumed(null, TestCause),
+        });
+
+        Assert.Null(envelope.HeldAt);
+    }
+
     /// <summary>A suspend keeps the step name and input, which is the whole reason resume can
     /// re-execute it.</summary>
     [Fact]
@@ -192,7 +225,7 @@ public class WorkflowEventFoldTests
         var envelope = WorkflowEventFold.ApplyAll(Fresh(), new WorkflowEvent[]
         {
             new WorkflowEvent.StepStarted("Charge", 42, Now.AddSeconds(5), null, TestCause),
-            new WorkflowEvent.RunSuspended(TestCause),
+            new WorkflowEvent.RunSuspended(TestCause, Now),
         });
 
         Assert.Equal("Charge", envelope.CurrentStepName);

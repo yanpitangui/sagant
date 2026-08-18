@@ -278,6 +278,13 @@ workflow started by another workflow, or by any caller with an ambient trace, re
 whatever sent it. Fires once, gated the same way a child's first-activity link is: only before this
 entity's very first activity has ever completed.
 
+**O5 — Leaving Suspended reports how long it waited.**
+The `Paused` counterpart, `O3`, extended to `Suspended`: the instant an instance enters it is persisted
+(`WorkflowRuntimeState.HeldAt`, set from `RunSuspended` or `RunParked` — an operator hold and a parked
+failure alike, since both reach the same status). Every route back out — a hold timeout's step, ending,
+deleting, restarting, an operator `Resume`, or a `Terminate` — records `sagant.workflow.suspended.duration`
+against that instant once, right where it also reports the status change itself.
+
 
 ---
 

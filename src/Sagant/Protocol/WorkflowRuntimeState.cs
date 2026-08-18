@@ -101,6 +101,14 @@ public sealed record WorkflowRuntimeState<TState>(
     /// <summary>The step run when <see cref="HoldDeadline"/> passes, releasing the instance into
     /// whatever that step decides.</summary>
     string? HoldTimeoutStepName = null,
+    /// <summary>
+    /// The absolute instant this instance entered <see cref="WorkflowStatus.Suspended"/>, set from
+    /// <see cref="Execution.WorkflowEvent.RunSuspended"/>/<see cref="Execution.WorkflowEvent.RunParked"/>.
+    /// <c>null</c> whenever the status isn't <c>Suspended</c> — cleared the moment the instance leaves
+    /// it, whatever route it takes out. What <see cref="Execution.WorkflowDecision.RecordSuspendedDuration"/>
+    /// is measured against — the <c>Suspended</c> counterpart to <see cref="PausedAt"/>.
+    /// </summary>
+    DateTimeOffset? HeldAt = null,
     string? LastTraceParent = null,
     /// <summary>Set while waiting out a <c>RecoverStrategy.BackoffForAttempt</c> delay before a
     /// retry — same "persist an absolute deadline, re-arm a live timer on reactivation" durability
