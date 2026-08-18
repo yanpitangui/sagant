@@ -193,13 +193,14 @@ workflow's own business logic in `WorkflowSettings`:
 - `configureShardOptions` — pass-through tuning for `ShardOptions`. Runs after `WithWorkflow` sets
   its own defaults, so it sees and may override them:
   - `HandOffStopMessage` is a `GracefulShutdown`, so an in-flight step can finish across a rebalance.
-  - `PassivateIdleEntityAfter` is **disabled**, overriding Akka Cluster Sharding's own 120-second
-    default. Passivation stops an idle entity actor to free memory, leaving its persisted state
-    untouched and reactivating transparently on the next message — but a live timer belongs to a live
-    entity. A workflow legitimately sits idle while holding a deadline (a pause awaiting approval, a
-    long workflow timeout), and under the stock default it would passivate two minutes in, losing the
-    timer; the deadline then only fires when something next activates it. Re-enable it if instances
-    staying resident until terminal costs more than that lateness. See `docs/guarantees.md` D8.
+  - `PassivateIdleEntityAfter` is left at Akka Cluster Sharding's own 120-second stock default.
+    Passivation stops an idle entity actor to free memory, leaving its persisted state untouched and
+    reactivating transparently on the next message — but a live timer belongs to a live entity. A
+    workflow legitimately sits idle while holding a deadline (a pause awaiting approval, a long
+    workflow timeout), and passivating two minutes in loses that live timer; the deadline then only
+    fires when something next activates it (guarantee D8), unless `WithWorkflowDeadlines` is running
+    to bound that lateness (guarantee D8b). Pass `TimeSpan.Zero` here to hold every instance resident
+    until terminal instead, at the memory cost that implies. See `docs/guarantees.md` D8/D8a/D8b.
 - `numberOfShards`, `producerBufferCapacity`, `configureProducerControllerSettings`,
   `configureConsumerControllerSettings`, `gracefulShutdownGrace`, `timeoutScheduler`, `timeProvider`
   — see the parameter docs on `WithWorkflow` itself.

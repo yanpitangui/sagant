@@ -95,9 +95,10 @@ builder.WithWorkflow<OrderFulfillmentWorkflow, OrderState>(
     configureShardOptions: options => options.PassivateIdleEntityAfter = TimeSpan.FromMinutes(10));
 ```
 
-`WithWorkflow` disables idle passivation by default, because a workflow legitimately sits idle while
-holding a deadline and a live timer belongs to a live entity — re-enabling it, as above, trades
-bounded timer lateness for memory. See
+`WithWorkflow` leaves `PassivateIdleEntityAfter` at cluster sharding's own 120-second stock default,
+because a workflow legitimately sits idle while holding a deadline and a live timer belongs to a live
+entity — raising it, as above, trades memory for bounded timer lateness; `WithWorkflowDeadlines` is
+the alternative that keeps the shorter default and still bounds that lateness (guarantee D8b). See
 [akka-runtime.md](akka-runtime.md#deployment-level-configuration).
 
 See [akka-runtime.md](akka-runtime.md#deployment-level-configuration) for the full parameter list.

@@ -354,9 +354,10 @@ addressable only by an id you already hold.
 
 ## Known limits
 
-- **Timer lateness when passivation is re-enabled (D8).** Off by default, so this only bites a
-  deployment that turns it back on — and it is all that turning it back on costs, since work in
-  progress holds its instance resident (D8a).
+- **Timer lateness while passivated (D8).** On by default (120-second idle window), so any deployment
+  that has not pinned `PassivateIdleEntityAfter` to `TimeSpan.Zero` carries this cost for a deadline
+  further out than the window and no `WithWorkflowDeadlines` scheduler running (D8b) — work in
+  progress holds its instance resident regardless (D8a).
 - **A dropped step stalls its instances (E5).** They are held in place, kept alive, and each one needs
   the step deployed again plus a `Resume` before it moves. Nothing self-heals: the operator does both.
 - **Unbounded journal growth.** A workflow that loops indefinitely keeps appending events, and

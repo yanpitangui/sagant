@@ -42,14 +42,17 @@ public static class WorkflowClusterShardingExtensions
     /// <param name="configureShardOptions">
     /// Deployment-level shard tuning. Runs after this method sets its own defaults, so the callback
     /// sees — and may override — them: <c>HandOffStopMessage</c> is a <c>GracefulShutdown</c> so an
-    /// in-flight step can finish across a rebalance, and <c>PassivateIdleEntityAfter</c> is disabled
-    /// so an instance holding a deadline keeps the live timer that fires it.
+    /// in-flight step can finish across a rebalance, and <c>PassivateIdleEntityAfter</c> is
+    /// <see cref="DefaultPassivateIdleEntityAfter"/>, the same 120-second stock default Akka Cluster
+    /// Sharding ships with.
     ///
-    /// <para>Turning passivation on here is safe for work in progress: an entity running a step or
-    /// waiting out a retry backoff announces itself to its own shard at half the idle window, so it
-    /// stays resident for as long as the work takes (see <see cref="EntityKeepAlive"/>). What it
-    /// still costs is deadline lateness — a paused or long-running instance that passivates fires its
-    /// deadline whenever something next activates it (guarantee D8).</para>
+    /// <para>Passivation is safe for work in progress: an entity running a step or waiting out a
+    /// retry backoff announces itself to its own shard at half the idle window, so it stays resident
+    /// for as long as the work takes (see <see cref="EntityKeepAlive"/>). What it costs is deadline
+    /// lateness — a paused or long-running instance that passivates fires its deadline whenever
+    /// something next activates it (guarantee D8), unless <c>WithWorkflowDeadlines</c> is running to
+    /// bound that lateness (guarantee D8b). Pass <see cref="TimeSpan.Zero"/> here to hold every
+    /// instance resident instead, at the memory cost that implies.</para>
     /// </param>
     /// <param name="producerBufferCapacity">
     /// Depth of the bounded local queue <c>WorkflowProducerAdapter</c> holds pending sends in before
