@@ -100,14 +100,14 @@ public class WorkflowDeadlineProjectionTests : TestKit
     [Theory]
     [InlineData(1)]
     [InlineData(16)]
-    public void AnInstancesOwnEventsAreAppliedInOrder(int lanes)
+    public async Task AnInstancesOwnEventsAreAppliedInOrder(int lanes)
     {
         var scheduler = new RecordingScheduler();
 
         // Started before the writes, so these arrive through the live phase. The backfill folds
         // history, without replaying it event by event, so an instance that paused and resumed
         // before this ran contributes nothing — which is a different question, covered below.
-        Projection(scheduler, lanes).RunAsync().Wait();
+        await Projection(scheduler, lanes).RunAsync();
 
         Write("order-ordered",
             new WorkflowEvent.RunPaused("waiting", DateTimeOffset.UtcNow.AddHours(4), "OnTimeout", null, Cause),
@@ -129,12 +129,12 @@ public class WorkflowDeadlineProjectionTests : TestKit
     /// round-robin partition would break while still looking correct for a single instance.
     /// </summary>
     [Fact]
-    public void ManyInstancesInterleaved_EachKeepsItsOwnOrder()
+    public async Task ManyInstancesInterleaved_EachKeepsItsOwnOrder()
     {
         var scheduler = new RecordingScheduler();
         var ids = Enumerable.Range(0, 12).Select(i => $"order-{i}").ToList();
 
-        Projection(scheduler, lanes: 16).RunAsync().Wait();
+        await Projection(scheduler, lanes: 16).RunAsync();
 
         foreach (var id in ids)
         {
@@ -160,10 +160,10 @@ public class WorkflowDeadlineProjectionTests : TestKit
     /// ever retires whatever was recorded for it — it records nothing new.
     /// </summary>
     [Fact]
-    public void ADeadlineInsideTheThreshold_IsRetiredRatherThanRecorded()
+    public async Task ADeadlineInsideTheThreshold_IsRetiredRatherThanRecorded()
     {
         var scheduler = new RecordingScheduler();
-        Projection(scheduler, lanes: 4).RunAsync().Wait();
+        await Projection(scheduler, lanes: 4).RunAsync();
 
         Write("order-near",
             new WorkflowEvent.RunPaused("waiting", DateTimeOffset.UtcNow.AddMilliseconds(200), "OnTimeout", null, Cause));
@@ -180,14 +180,14 @@ public class WorkflowDeadlineProjectionTests : TestKit
     /// is already running: instances that recorded a deadline before it existed are found.
     /// </summary>
     [Fact]
-    public void ItFindsDeadlinesWrittenBeforeItStarted()
+    public async Task ItFindsDeadlinesWrittenBeforeItStarted()
     {
         var scheduler = new RecordingScheduler();
         Write("order-backfill",
             new WorkflowEvent.RunPaused("waiting", DateTimeOffset.UtcNow.AddHours(4), "OnTimeout", null, Cause));
 
         // Started only after the write, which is the case a running deployment presents.
-        Projection(scheduler, lanes: 4).RunAsync().Wait();
+        await Projection(scheduler, lanes: 4).RunAsync();
 
         // Recording is at-least-once: the live phase resumes at the offset the fold reached, and a
         // journal whose offset includes that event applies it a second time. An arm carries the
@@ -209,7 +209,7 @@ public class WorkflowDeadlineProjectionTests : TestKit
     /// ever ran.
     /// </summary>
     [Fact]
-    public void HistoryThatEndedIsNotRecordedAtAll()
+    public async Task HistoryThatEndedIsNotRecordedAtAll()
     {
         var scheduler = new RecordingScheduler();
 
@@ -217,7 +217,7 @@ public class WorkflowDeadlineProjectionTests : TestKit
             new WorkflowEvent.RunPaused("waiting", DateTimeOffset.UtcNow.AddHours(4), "OnTimeout", null, Cause),
             new WorkflowEvent.RunFinished(WorkflowOutcome.Completed.Instance, null, Cause));
 
-        Projection(scheduler, lanes: 4).RunAsync().Wait();
+        await Projection(scheduler, lanes: 4).RunAsync();
 
         Thread.Sleep(500);
         Assert.DoesNotContain(scheduler.Calls, c => c.Key.EntityId == "order-done");
@@ -228,21 +228,21 @@ public class WorkflowDeadlineProjectionTests : TestKit
     /// restart from costing a journal that only grows.
     /// </summary>
     [Fact]
-    public void ResumingFromAPosition_LeavesEarlierHistoryAlone()
+    public async Task ResumingFromAPosition_LeavesEarlierHistoryAlone()
     {
         var seen = new RecordingScheduler();
         Write("order-early",
             new WorkflowEvent.RunPaused("waiting", DateTimeOffset.UtcNow.AddHours(4), "OnTimeout", null, Cause));
 
         // Reads the history, so this one knows the instance.
-        Projection(seen, lanes: 4).RunAsync().Wait();
+        await Projection(seen, lanes: 4).RunAsync();
         AwaitAssert(
             () => Assert.Contains(seen.Calls, c => c.Key.EntityId == "order-early"),
             TimeSpan.FromSeconds(10));
 
         // Resumed past everything written so far, so the same instance is not seen again.
         var resumed = new RecordingScheduler();
-        Projection(resumed, lanes: 4).RunAsync(Offset.Sequence(long.MaxValue - 1)).Wait();
+        await Projection(resumed, lanes: 4).RunAsync(Offset.Sequence(long.MaxValue - 1));
 
         Thread.Sleep(500);
         Assert.DoesNotContain(resumed.Calls, c => c.Key.EntityId == "order-early");
@@ -250,10 +250,10 @@ public class WorkflowDeadlineProjectionTests : TestKit
 
     /// <summary>A group's arm carries its id, so two groups on one instance stay apart.</summary>
     [Fact]
-    public void AGroupsArmCarriesItsGroupId()
+    public async Task AGroupsArmCarriesItsGroupId()
     {
         var scheduler = new RecordingScheduler();
-        Projection(scheduler, lanes: 4).RunAsync().Wait();
+        await Projection(scheduler, lanes: 4).RunAsync();
 
         var group = new ChildGroupState(
             "items", Generation: 0, Sagant.Effects.CompletionPolicy.AllSuccessful,
@@ -264,8 +264,8 @@ public class WorkflowDeadlineProjectionTests : TestKit
 
         AwaitAssert(() =>
         {
-            var arm = Assert.Single(scheduler.Calls.Where(c =>
-                c.Key.EntityId == "order-groups" && c.Key.Kind == WorkflowTimerKind.ChildGroup && c.Due is not null));
+            var arm = Assert.Single(scheduler.Calls, c =>
+                c.Key.EntityId == "order-groups" && c.Key.Kind == WorkflowTimerKind.ChildGroup && c.Due is not null);
             Assert.Equal("items", arm.Key.Discriminator);
         }, TimeSpan.FromSeconds(10));
     }
