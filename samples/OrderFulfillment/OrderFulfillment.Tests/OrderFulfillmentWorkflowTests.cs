@@ -2,6 +2,7 @@ using Sagant.Clients;
 using Sagant.Runtime.Akka.Clustering;
 using Sagant.Protocol;
 using Sagant.Runtime.Akka;
+using Sagant.Runtime.Akka.Serialization;
 using Akka.Actor;
 using Akka.TestKit;
 using OrderFulfillment.Sample;
@@ -88,6 +89,32 @@ public class OrderFulfillmentWorkflowTests : Akka.TestKit.Xunit2.TestKit
         Assert.Equal(OrderStatus.Succeeded, final.Status);
         Assert.NotNull(final.PaymentId);
         Assert.Single(notification.Sent);
+    }
+
+    /// <summary>
+    /// The pattern a workflow author copies to check their own <c>TState</c>/commands: build a
+    /// realistic value, round-trip it through the <see cref="ActorSystem"/> <c>WithWorkflow</c> set
+    /// up (the same one <see cref="WorkflowRuntimeStateSerializer"/>/<c>SagantSerializer</c> are
+    /// bound to), and assert the result matches. <c>OrderState</c> is a plain record, carrying no
+    /// serialization attributes of its own — exactly the case
+    /// <see cref="SerializationRoundTripAssertions.AssertRoundTrips{T}"/> exists to prove works.
+    /// </summary>
+    [Fact]
+    public async Task OrderState_And_PlaceOrder_RoundTripThroughTheRealActorSystem()
+    {
+        await using var harness = await StartAsync(
+            new FakeInventoryService(), new FakePaymentService(), new FakeShippingService(), new FakeNotificationService());
+
+        var items = new List<OrderLineItem> { new("order-9#item-0", 300), new("order-9#item-1", 200) };
+        var state = new OrderState("cust-9", 500, items, "1 Main St", OrderStatus.Fulfilling, PaymentId: "pay-9");
+        var roundTrippedState = SerializationRoundTripAssertions.AssertRoundTrips(harness.System, state);
+        Assert.Equal(state with { Items = [] }, roundTrippedState with { Items = [] });
+        Assert.Equal(state.Items, roundTrippedState.Items);
+
+        var command = new PlaceOrder("cust-9", items, "1 Main St");
+        var roundTrippedCommand = SerializationRoundTripAssertions.AssertRoundTrips(harness.System, command);
+        Assert.Equal(command with { Items = [] }, roundTrippedCommand with { Items = [] });
+        Assert.Equal(command.Items, roundTrippedCommand.Items);
     }
 
     [Fact]
