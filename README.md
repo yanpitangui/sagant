@@ -24,7 +24,60 @@ guidelines, child workflows, the Akka runtime's internals, integration, and test
 
 Reference `Sagant` and `Sagant.Runtime.Akka`.
 
-**Define a workflow:**
+**The minimum: one required override, a command handler to start the run, a step to do
+something.**
+
+```csharp scaffold=file
+public sealed record GreetingState(string Name = "", string? Greeting = null);
+
+public sealed record Greet(string Name);
+
+public partial class GreetingWorkflow : Workflow<GreetingState>
+{
+    public override GreetingState EmptyState() => new();
+
+    [WorkflowCommandHandler]
+    public CommandEffect<GreetingState> Start(Greet cmd, CommandContext<GreetingState> ctx) =>
+        Effects.UpdateState(ctx.State with { Name = cmd.Name }).TransitionTo(Steps.SayHello);
+
+    [WorkflowStep]
+    public StepEffect<GreetingState> SayHello(StepContext<GreetingState> ctx) =>
+        StepEffects.UpdateState(ctx.State with { Greeting = $"Hello, {ctx.State.Name}!" }).ThenComplete();
+}
+```
+
+`EmptyState()` is the only member `Workflow<TState>` actually requires — `Settings()`, retries,
+timeouts, pause, queries, and child workflows are all opt-in on top of this. `Steps.SayHello` is
+generated for you, a typed reference to the `[WorkflowStep]` method above, so a transition never
+relies on a magic string.
+
+**Register it:**
+
+```csharp scaffold=statements
+services.AddAkka("my-system", builder => builder
+    .WithClustering()
+    .WithWorkflow<GreetingWorkflow, GreetingState>(() => new GreetingWorkflow()))
+    .AddWorkflowClient();
+```
+
+**Drive it — the only thing application code ever touches:**
+
+```csharp scaffold=file
+public sealed class GreetingService(IWorkflowClient client)
+{
+    public ValueTask GreetAsync(string id, string name) =>
+        client.For<GreetingWorkflow>(id).Send(new Greet(name));
+}
+```
+
+That's a complete, runnable workflow — define, register, drive. `IWorkflowClient`/
+`IWorkflowHandle<TWorkflow>` are the full public surface a caller ever touches: no `IActorRef`,
+`ActorRegistry`, or `ClusterSharding` type leaks into application code.
+
+## A fuller example
+
+Real workflows add retries with failover, dependencies resolved from DI, and reads that don't wait
+on a running step. Here's one that does, built from the same three handler kinds above:
 
 ```csharp scaffold=file
 public partial class OrderFulfillmentWorkflow : Workflow<OrderState>
@@ -62,10 +115,34 @@ public partial class OrderFulfillmentWorkflow : Workflow<OrderState>
 }
 ```
 
-`Steps.ChargePaymentStep` and friends are generated for you — a typed reference to each
-`[WorkflowStep]` method, so transitions never rely on magic strings. See
-[`docs/workflow-model.md`](docs/workflow-model.md#the-source-generator) for how the generator works,
-and [`docs/workflow-model.md#effects-applied-by-the-driver`](docs/workflow-model.md#effects-applied-by-the-driver)
+Registration is the same shape, with the factory now resolving `IPaymentService` from DI — the
+`(builder, IServiceProvider)` overload of `AddAkka` exists for exactly this, where the minimal
+example above had no dependency to resolve and used the plain `Action<AkkaConfigurationBuilder>`
+overload instead:
+
+```csharp scaffold=statements
+services.AddSingleton<IPaymentService, RealPaymentService>();
+
+services.AddAkka("my-system", (builder, sp) => builder
+    .WithClustering()
+    .WithWorkflow<OrderFulfillmentWorkflow, OrderState>(() =>
+        new OrderFulfillmentWorkflow(sp.GetRequiredService<IPaymentService>())))
+    .AddWorkflowClient();
+```
+
+Driving it looks the same too, just with a typed reply this time:
+
+```csharp scaffold=file
+public sealed class OrderPlacementService(IWorkflowClient client)
+{
+    public Task<string> PlaceAsync(string orderId, int amount) =>
+        client.For<OrderFulfillmentWorkflow>(orderId)
+            .Request<PlaceOrder, string>(new PlaceOrder(amount), TimeSpan.FromSeconds(10));
+}
+```
+
+See [`docs/workflow-model.md`](docs/workflow-model.md#the-source-generator) for how the generator
+works, and [`docs/workflow-model.md#effects-applied-by-the-driver`](docs/workflow-model.md#effects-applied-by-the-driver)
 for the full set of transitions a handler can produce (pause, delete, await-children, and so on —
 not just the transition-to-next-step and end shown above).
 
@@ -102,32 +179,8 @@ step still in flight is about to supersede — see
 Retries, backoff, per-step timeout overrides, and pause-with-timeout are all configured through
 `Settings()` — see [`docs/workflow-model.md#settings-retries-and-pause`](docs/workflow-model.md#settings-retries-and-pause).
 
-**Register it and get a client (Akka.NET runtime):**
-
-```csharp scaffold=statements
-services.AddSingleton<IPaymentService, RealPaymentService>();
-
-// The (builder, IServiceProvider) overload, so the workflow factory can resolve dependencies from
-// DI — the plain Action<AkkaConfigurationBuilder> overload has no IServiceProvider to give it.
-services.AddAkka("my-system", (builder, sp) => builder
-    .WithClustering()
-    .WithWorkflow<OrderFulfillmentWorkflow, OrderState>(() =>
-        new OrderFulfillmentWorkflow(sp.GetRequiredService<IPaymentService>())))
-    .AddWorkflowClient();
-```
-
-**Drive it — the only thing application code ever touches:**
-
-```csharp scaffold=file
-public sealed class OrderPlacementService(IWorkflowClient client)
-{
-    public Task<string> PlaceAsync(string orderId, int amount) =>
-        client.For<OrderFulfillmentWorkflow>(orderId)
-            .Request<PlaceOrder, string>(new PlaceOrder(amount), TimeSpan.FromSeconds(10));
-}
-```
-
-Three verbs on a handle: `Send` mutates without waiting, `Request` mutates and returns a reply, and
+Three verbs on a handle, between the two you've already seen: `Send` mutates without waiting (the
+`GreetingService` example), `Request` mutates and returns a reply (`OrderPlacementService`), and
 `Query` observes:
 
 ```csharp scaffold=statements

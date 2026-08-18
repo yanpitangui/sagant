@@ -207,9 +207,19 @@ public static class DocSnippetExtractor
         ("OnLineItemsDone", "[WorkflowStep] public StepEffect<OrderState> OnLineItemsDone(ChildGroupResult result) => StepEffects.ThenComplete();"),
     ];
 
+    /// <summary>Matches a snippet declaring some workflow class of its own, distinct from the
+    /// canonical <c>OrderFulfillmentWorkflow</c> — a self-contained example (the README's minimum
+    /// quickstart, say) that needs no filler for an example it never references.</summary>
+    private static readonly Regex DeclaresAWorkflowClass = new(@"class\s+\w+\s*:\s*Workflow<", RegexOptions.Compiled);
+
     private static string FillerFor(string code, Scaffold scaffold)
     {
         var declaresWorkflow = code.Contains("class OrderFulfillmentWorkflow", StringComparison.Ordinal);
+
+        if (!declaresWorkflow && DeclaresAWorkflowClass.IsMatch(code))
+        {
+            return GreetingWorkflowFillerIfReferenced(code);
+        }
 
         // The generator reads one class declaration, so the steps have to sit in whichever
         // declaration is the workflow's real one. A workflow-member scaffold already opened it and
@@ -217,6 +227,7 @@ public static class DocSnippetExtractor
         var ownsTheDeclaration = scaffold != Scaffold.WorkflowMember && !declaresWorkflow;
 
         var filler = new StringBuilder();
+        filler.AppendLine(GreetingWorkflowFillerIfReferenced(code));
         filler.AppendLine(declaresWorkflow
             ? "public partial class OrderFulfillmentWorkflow"
             : "public partial class OrderFulfillmentWorkflow : Workflow<OrderState>");
@@ -255,6 +266,33 @@ public static class DocSnippetExtractor
 
         return steps.ToString();
     }
+
+    /// <summary>
+    /// The README's minimum quickstart example, shown in full in the doc that defines it and
+    /// referenced by name alone in the doc that registers/drives it — the same split
+    /// <c>OrderFulfillmentWorkflow</c> gets, at a smaller scale. A snippet that only references
+    /// <c>GreetingWorkflow</c> (register/drive) needs this filler; one that declares it itself
+    /// (define) supplies its own and this returns nothing so the two never collide.
+    /// </summary>
+    private static string GreetingWorkflowFillerIfReferenced(string code) =>
+        Regex.IsMatch(code, @"\bGreetingWorkflow\b") && !code.Contains("class GreetingWorkflow", StringComparison.Ordinal)
+            ? """
+              public sealed record GreetingState(string Name = "", string? Greeting = null);
+              public sealed record Greet(string Name);
+              public partial class GreetingWorkflow : Workflow<GreetingState>
+              {
+                  public override GreetingState EmptyState() => new();
+
+                  [WorkflowCommandHandler]
+                  public CommandEffect<GreetingState> Start(Greet cmd, CommandContext<GreetingState> ctx) =>
+                      Effects.UpdateState(ctx.State with { Name = cmd.Name }).TransitionTo(Steps.SayHello);
+
+                  [WorkflowStep]
+                  public StepEffect<GreetingState> SayHello(StepContext<GreetingState> ctx) =>
+                      StepEffects.UpdateState(ctx.State with { Greeting = $"Hello, {ctx.State.Name}!" }).ThenComplete();
+              }
+              """
+            : string.Empty;
 
     /// <summary>
     /// The names a caller-side snippet writes without introducing. Emitted as fields, so a snippet
