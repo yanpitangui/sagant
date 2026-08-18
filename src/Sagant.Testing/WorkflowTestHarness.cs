@@ -493,17 +493,19 @@ public sealed class WorkflowTestHarness<TWorkflow, TState>
             // transition — the planner emits StartStep for both. What it adds is that the history
             // behind it becomes reclaimable, which is a driver's own act and nothing this harness
             // holds.
-            (stepName, input) = effect.Transition switch
+            (string StepName, object? Input)? next = effect.Transition switch
             {
-                Transition.StepTransition next => (next.StepName, next.Input),
+                Transition.StepTransition st => (st.StepName, st.Input),
                 Transition.RestartTransition restart => (restart.StepName, restart.Input),
-                _ => (null, null),
+                _ => null,
             };
 
-            if (stepName is null)
+            if (next is null)
             {
                 return effect;
             }
+
+            (stepName, input) = next.Value;
         }
     }
 
