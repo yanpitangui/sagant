@@ -1,6 +1,5 @@
 using Akka.Actor;
 using Akka.Serialization;
-using Newtonsoft.Json;
 using Sagant.Execution;
 using Sagant.Protocol;
 
@@ -40,17 +39,14 @@ public static class WorkflowRuntimeStateSerializerSetup
 /// to those two closed generic types, so this never touches how anything else on the
 /// <see cref="ActorSystem"/> serializes. Both wrap a bare <typeparamref name="TState"/> somewhere
 /// inside them, so both need the same treatment: a workflow author's own state can carry the same
-/// readonly-collection shape <c>WorkflowRuntimeState.Children</c> did, and the default serializer
+/// readonly-collection shape <c>WorkflowRuntimeState.Children</c> did, and the default json serializer
 /// would refuse it there too.
 ///
-/// Newtonsoft still does the work — <see cref="JsonSerializerSettings.TypeNameHandling"/> still needs
-/// <see cref="TypeNameHandling.All"/> so a workflow author's own polymorphic
-/// <c>Result</c>/<c>Command</c>/<c>CurrentStepInput</c> values round-trip. What differs from the
-/// ActorSystem's default json serializer is <see cref="JsonSerializerSettings.PreserveReferencesHandling"/>:
-/// left off here, because a workflow's own persisted state is a value snapshot with no expected
-/// reference cycles, and turning it on is what makes Newtonsoft refuse a readonly, no-default-
-/// constructor collection like <c>ImmutableDictionary&lt;TKey,TValue&gt;</c> — see
-/// <c>WorkflowRuntimeState.Children</c>.
+/// <see cref="SagantCodec"/> does the actual byte-level work — the same codec
+/// <see cref="SagantSerializer"/> uses. What's different here is the manifest: a closed generic per
+/// <typeparamref name="TState"/> has no fixed set of cases to name the way <c>WorkflowEvent</c>'s
+/// hierarchy does, so this rides <see cref="Serializer.IncludeManifest"/>'s CLR-name manifest instead
+/// of a string one.
 /// </summary>
 public sealed class WorkflowRuntimeStateSerializer : Serializer
 {
@@ -62,11 +58,6 @@ public sealed class WorkflowRuntimeStateSerializer : Serializer
     /// </summary>
     public const int SerializerIdentifier = 1_090_100;
 
-    private readonly JsonSerializerSettings _settings = new()
-    {
-        TypeNameHandling = TypeNameHandling.All,
-    };
-
     public WorkflowRuntimeStateSerializer(ExtendedActorSystem system) : base(system)
     {
     }
@@ -75,9 +66,7 @@ public sealed class WorkflowRuntimeStateSerializer : Serializer
 
     public override bool IncludeManifest => true;
 
-    public override byte[] ToBinary(object obj) =>
-        System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(obj, obj.GetType(), _settings));
+    public override byte[] ToBinary(object obj) => SagantCodec.ToBinary(obj);
 
-    public override object FromBinary(byte[] bytes, Type? type) =>
-        JsonConvert.DeserializeObject(System.Text.Encoding.UTF8.GetString(bytes), type!, _settings)!;
+    public override object FromBinary(byte[] bytes, Type? type) => SagantCodec.FromBinary(bytes, type!);
 }

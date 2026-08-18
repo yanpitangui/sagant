@@ -1,7 +1,6 @@
 using System.Runtime.Serialization;
 using Akka.Actor;
 using Akka.Serialization;
-using Newtonsoft.Json;
 using Sagant.Effects;
 using Sagant.Execution;
 using Sagant.Protocol;
@@ -17,13 +16,10 @@ namespace Sagant.Runtime.Akka.Serialization;
 /// one place naming every case this serializer covers, so a missing entry fails loudly: an unknown
 /// manifest on read, or an unregistered type on write, each a named exception.
 ///
-/// Still Newtonsoft underneath, with <see cref="TypeNameHandling.Auto"/>: the manifest identifies the
-/// outer object, so nothing needs a <c>$type</c> tag for itself, but a workflow author's own
-/// polymorphic values nested inside one of these types — <c>StepStarted.Input</c>,
-/// <c>ChildMemberUpdated.Result</c>, and the rest — still need one, since those stay the consumer's
-/// own types, outside this closed set. Which wire format sits under the manifest is a separate
-/// decision this leaves open for later; the manifest map is what keeps changing it later possible
-/// while every already-written event stays readable.
+/// <see cref="SagantCodec"/> does the actual byte-level work (MessagePack): the manifest identifies
+/// the outer object, so nothing needs its own type tag there, but a workflow author's own polymorphic
+/// values nested inside one of these types — <c>StepStarted.Input</c>, <c>ChildMemberUpdated.Result</c>,
+/// and the rest — still carry one, since those stay the consumer's own types, outside this closed set.
 ///
 /// Scoped to <c>WorkflowEvent</c>'s hierarchy, <c>ChildWorkflowRelationship</c>, <c>ChildGroupState</c>,
 /// and the protocol messages. <c>Sagant.Runtime.Akka</c>'s own internal transport messages
@@ -119,11 +115,6 @@ public sealed class SagantSerializer : SerializerWithStringManifest
         typeof(WorkflowCancellation),
     ];
 
-    private readonly JsonSerializerSettings _settings = new()
-    {
-        TypeNameHandling = TypeNameHandling.Auto,
-    };
-
     public SagantSerializer(ExtendedActorSystem system) : base(system)
     {
     }
@@ -136,12 +127,11 @@ public sealed class SagantSerializer : SerializerWithStringManifest
             : throw new SerializationException(
                 $"SagantSerializer has no manifest registered for {o.GetType()}. Add it to {nameof(SagantSerializer)}.{nameof(Registrations)}.");
 
-    public override byte[] ToBinary(object obj) =>
-        System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(obj, obj.GetType(), _settings));
+    public override byte[] ToBinary(object obj) => SagantCodec.ToBinary(obj);
 
     public override object FromBinary(byte[] bytes, string manifest) =>
         ManifestToType.TryGetValue(manifest, out var type)
-            ? JsonConvert.DeserializeObject(System.Text.Encoding.UTF8.GetString(bytes), type, _settings)!
+            ? SagantCodec.FromBinary(bytes, type)
             : throw new SerializationException(
                 $"SagantSerializer has no type registered for manifest '{manifest}'. " +
                 $"Was this written by a newer version that added a case this one doesn't know?");

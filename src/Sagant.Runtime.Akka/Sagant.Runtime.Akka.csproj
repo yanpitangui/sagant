@@ -14,6 +14,9 @@
     <PackageReference Include="Akka.Persistence.Query" />
     <PackageReference Include="Akka.Hosting" />
     <PackageReference Include="Akka.Cluster.Hosting" />
+    <PackageReference Include="Akka.Serialization.MessagePack2" />
+    <PackageReference Include="MessagePack" />
+    <PackageReference Include="MessagePack.ImmutableCollection" />
     <!-- Pin transitive OpenTelemetry.Api to the CPM version; Akka.* pulls an older,
          vulnerable version and CentralPackageTransitivePinningEnabled is off (see NU1902). -->
     <PackageReference Include="OpenTelemetry.Api" />
