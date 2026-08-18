@@ -20,12 +20,15 @@ internal static class SagantCodec
     /// handles a plain POCO or record with no attributes at all, which is every type this codebase
     /// persists — nothing here asks a workflow author to decorate their own <c>TState</c> or commands.
     /// <see cref="PolymorphicResolver"/> wraps both so a field declared as <c>object</c>/an abstract
-    /// base carries its own concrete type on the wire.
+    /// base carries its own concrete type on the wire. <c>Lz4BlockArray</c> compresses each top-level
+    /// value block independently, so a large persisted event or snapshot costs less on the wire and
+    /// in the journal without any per-type opt-in.
     /// </summary>
     private static readonly MessagePackSerializerOptions Options = MessagePackSerializerOptions.Standard
         .WithResolver(new PolymorphicResolver(CompositeResolver.Create(
             ImmutableCollectionResolver.Instance,
-            TypelessContractlessStandardResolver.Instance)));
+            TypelessContractlessStandardResolver.Instance)))
+        .WithCompression(MessagePackCompression.Lz4BlockArray);
 
     public static byte[] ToBinary(object obj) =>
         MessagePackSerializer.Serialize(obj.GetType(), obj, Options);
