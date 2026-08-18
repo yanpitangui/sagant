@@ -77,6 +77,11 @@ public readonly struct StepDescriptor<TState>
         IEnumerable<ActivityLink>? links = null,
         Action<Activity>? configureActivity = null)
     {
+        // Captured before StartActivity so this and the span below start from the same instant —
+        // configureActivity runs between them otherwise, skewing sagant.step.duration away from the
+        // span's own Duration. Reads the clock as a raw timestamp: reading it twice and comparing
+        // answers the duration question directly, with no object to allocate.
+        var startedAt = Stopwatch.GetTimestamp();
         using var activity = WorkflowDiagnostics.ActivitySource.StartActivity(
             $"{workflow.WorkflowTypeName}.Step.{Name}", ActivityKind.Internal, parentContext, tags: null, links: links);
         if (activity is not null)
@@ -84,9 +89,6 @@ public readonly struct StepDescriptor<TState>
             configureActivity?.Invoke(activity);
         }
 
-        // Every invocation goes through here, so this reads the clock as a raw timestamp: reading it
-        // twice and comparing answers the duration question directly, with no object to allocate.
-        var startedAt = Stopwatch.GetTimestamp();
         try
         {
             var result = await _invoke(workflow, new StepContext<TState>(state, attempt, cancellationToken, workflowId), input).ConfigureAwait(false);
