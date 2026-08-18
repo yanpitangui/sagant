@@ -9,8 +9,8 @@ namespace OrderFulfillment.Sample;
 /// One order line item's own reserve-then-ship pipeline, run as its own durable workflow entity
 /// (child of an <see cref="OrderFulfillmentWorkflow"/> — see <see cref="OrderFulfillmentWorkflow.FulfillItemsStep"/>).
 /// Compensates itself (<see cref="ReleaseItemStep"/>) on its own failure, then finishes as
-/// <c>Failed</c> — so its parent's group policy sees the failure directly rather than having to
-/// re-derive it from this workflow's own <see cref="ItemState.Status"/>.
+/// <c>Failed</c> — so its parent's group policy sees the failure directly, with nothing to
+/// re-derive from this workflow's own <see cref="ItemState.Status"/>.
 /// </summary>
 public partial class ItemFulfillmentWorkflow : Workflow<ItemState>
 {
@@ -66,9 +66,9 @@ public partial class ItemFulfillmentWorkflow : Workflow<ItemState>
             await _inventory.Release(reservationId);
         }
 
-        // Compensation ran, but this item did not get fulfilled — so the run reports Failed, and its
-        // parent's group policy sees a failure rather than a graceful end that happened to leave the
-        // item unshipped.
+        // Compensation ran, but this item did not get fulfilled — so the run reports Failed, plainly,
+        // and its parent's group policy sees exactly that failure — an honest report, standing apart
+        // from a graceful end that happened to leave the item unshipped.
         return StepEffects.UpdateState(ctx.State with { Status = ItemStatus.Failed })
             .ThenFail("item could not be fulfilled; its reservation was released");
     }

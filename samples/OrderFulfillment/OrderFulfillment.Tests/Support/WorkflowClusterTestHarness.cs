@@ -23,9 +23,9 @@ namespace OrderFulfillment.Tests.Support;
 /// own gossip, failure-detector heartbeats, and shard-coordinator retries are all scheduled through
 /// the same <c>system.Scheduler</c>. Swapping it for <see cref="Akka.TestKit.TestScheduler"/> freezes
 /// those too, so the cluster never converges past Joining — real cluster and virtual time are
-/// mutually exclusive, not a tuning problem. Tests that need deterministic control over a long
-/// timer (e.g. a 24h pause timeout) talk to a bare <see cref="Sagant.Runtime.Akka.WorkflowEntityActor{TWorkflow, TState}"/>
-/// with <c>TestScheduler</c> instead of going through this harness.
+/// mutually exclusive; this is a genuine incompatibility, well past being a tuning problem. Tests that need
+/// deterministic control over a long timer (e.g. a 24h pause timeout) talk to a bare <see cref="Sagant.Runtime.Akka.WorkflowEntityActor{TWorkflow, TState}"/>
+/// with <c>TestScheduler</c> directly, bypassing this harness.
 /// </summary>
 public sealed class WorkflowClusterTestHarness<TWorkflow, TState> : IAsyncDisposable
     where TWorkflow : Workflow<TState>, IWorkflowStepDispatcher<TState>, IWorkflowCommandDispatcher<TState>, IWorkflowQueryDispatcher<TState>, IWorkflowChildResultDispatcher<TState>, IWorkflowTypeInfo

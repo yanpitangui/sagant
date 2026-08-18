@@ -21,8 +21,8 @@ internal sealed class TimeoutHandles
 
     public ICancelable? Hold { get; set; }
 
-    /// <summary>One handle per awaited child group, keyed by group id. A dictionary rather than a
-    /// slot because an instance can await several groups at once, each with its own wait.</summary>
+    /// <summary>One handle per awaited child group, keyed by group id — a dictionary, since an
+    /// instance can await several groups at once, each with its own wait.</summary>
     private readonly Dictionary<string, ICancelable> _childGroups = new();
 
     public void SetChildGroup(string groupId, ICancelable handle)

@@ -57,9 +57,9 @@ public sealed class ChaosNode : IAsyncDisposable
 
         var builder = Host.CreateApplicationBuilder();
 
-        // Options rather than the connection-string overload: SqlJournalOptions owns QueryPluginId
-        // and configures the read journal alongside the write one, which is what the feed reads
-        // through.
+        // The options overload, in place of the connection-string one: SqlJournalOptions owns
+        // QueryPluginId and configures the read journal alongside the write one, which is what the
+        // feed reads through.
         var journalOptions = new SqlJournalOptions(isDefaultPlugin: true)
         {
             ConnectionString = connectionString,

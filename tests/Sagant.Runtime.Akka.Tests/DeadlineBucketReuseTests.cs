@@ -10,10 +10,11 @@ namespace Sagant.Runtime.Akka.Tests;
 /// <summary>
 /// What a bucket does once it has dealt with everything it held.
 ///
-/// A bucket covers a slice of time rather than one deadline, so every deadline falling inside that
-/// slice addresses the same entity — and a schedule firing several times a minute re-arms into the
-/// slice it just fired out of. An entity that stops itself loses whatever <c>ClusterSharding</c>
-/// routes to it while it goes, which for a bucket is ordinary traffic rather than a rare race: the
+/// A bucket covers a whole slice of time, holding every deadline that falls inside it, so every
+/// deadline in that slice addresses the same entity — and a schedule firing several times a minute
+/// re-arms into the slice it just fired out of. An entity that stops itself loses whatever
+/// <c>ClusterSharding</c> routes to it while it goes, and for a bucket that arriving traffic is
+/// entirely ordinary: the
 /// schedule that just woke is arming its next deadline right then. Losing that arm leaves the
 /// schedule asleep with nothing left to wake it.
 ///
@@ -86,9 +87,9 @@ public class DeadlineBucketReuseTests : TestKit
         """;
 
     /// <summary>
-    /// Driven directly rather than through a shard region, since what is being pinned down is what the
-    /// bucket does about its own lifetime — a region in front of it would answer a later question by
-    /// starting a fresh incarnation, hiding the very thing this asks about.
+    /// Driven directly, with no shard region in front of it, since what is being pinned down is what
+    /// the bucket itself does about its own lifetime — a region there would answer a later question
+    /// by starting a fresh incarnation, hiding the very thing this asks about.
     /// </summary>
     [Fact]
     public void ABucketThatDealtWithEverythingItHeld_StaysForTheShardToReap()

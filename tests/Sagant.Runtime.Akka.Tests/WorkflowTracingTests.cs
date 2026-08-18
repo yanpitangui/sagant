@@ -93,7 +93,7 @@ public class WorkflowTracingTests : WorkflowActorTestKit, IDisposable
         // The ActivitySource is process-global, and other test classes running concurrently may
         // use the same step name ("SlowStep" collides with WorkflowEntityActorTests's
         // CrashRecovery test) — every span this test cares about must be scoped to this specific
-        // persistenceId, not matched by operation name alone.
+        // persistenceId; operation name alone is not a safe enough match.
         const string persistenceId = nameof(TraceContext_SurvivesActorRestart_FirstSpanAfterRecoveryLinksToPreCrashTrace);
         var actor1 = CreateActor(persistenceId, script);
         actor1.Tell(new StartWorkflow(1), TestActor);
@@ -157,9 +157,10 @@ public class WorkflowTracingTests : WorkflowActorTestKit, IDisposable
             Assert.Equal(2, stepActivities.Count(a => a.Status == ActivityStatusCode.Error));
             Assert.Equal(1, stepActivities.Count(a => a.Status == ActivityStatusCode.Ok));
 
-            // Siblings, not a chain: attempt 2 isn't nested inside attempt 1 (which already ended,
-            // Error, by the time attempt 2 starts) — every retry shares the SAME parent (whatever
-            // triggered FlakyStep in the first place, here the StartWorkflow command), or a trace
+            // Siblings, standing apart from any chain: attempt 2 isn't nested inside attempt 1
+            // (which already ended, Error, by the time attempt 2 starts) — every retry shares the
+            // SAME parent (whatever triggered FlakyStep in the first place, here the StartWorkflow
+            // command), or a trace
             // waterfall view would misrepresent independent sequential retries as one attempt
             // containing the next.
             var parentIds = stepActivities.Select(a => a.ParentSpanId).Distinct().ToList();

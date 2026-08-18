@@ -111,7 +111,7 @@ public abstract class WorkflowActorTestKit : TestKit
     /// tables below can name a concrete workflow identity. A concrete sealed subclass supplies the
     /// public constructor and the one-line <see cref="IWorkflowTypeInfo"/> implementation — that's
     /// the entire cost of registering a second identity under <c>WorkflowHandleRegistry</c>, which
-    /// keys by compile-time <c>TWorkflow</c> type, not by any runtime string.
+    /// keys by compile-time <c>TWorkflow</c> type alone, with no runtime string involved.
     /// </summary>
     protected abstract class ScriptableWorkflowBase<TSelf> : Workflow<TestState>, IWorkflowStepDispatcher<TestState>, IWorkflowCommandDispatcher<TestState>, IWorkflowQueryDispatcher<TestState>, IWorkflowChildResultDispatcher<TestState>
         where TSelf : ScriptableWorkflowBase<TSelf>
@@ -243,7 +243,8 @@ public abstract class WorkflowActorTestKit : TestKit
     /// that need two independently-addressable workflows in the same <c>WorkflowHandleRegistry</c>
     /// (e.g. a parent talking to a child over real <c>ShardingProducerController</c>/
     /// <c>ConsumerController</c> stand-ins) — <c>Register&lt;TWorkflow, TState&gt;</c> keys off
-    /// <c>TWorkflow</c>, so the second party needs its own type, not just its own persistence id.
+    /// <c>TWorkflow</c>, so the second party needs its own type; its own persistence id alone
+    /// wouldn't be enough.
     /// </summary>
     protected sealed class AltScriptableWorkflow : ScriptableWorkflowBase<AltScriptableWorkflow>, IWorkflowTypeInfo
     {
@@ -333,7 +334,7 @@ public abstract class WorkflowActorTestKit : TestKit
             keepAliveInterval: keepAliveInterval);
 
     /// <summary>
-    /// Creates an actor under the <see cref="AltScriptableWorkflow"/> identity instead of
+    /// Creates an actor under the <see cref="AltScriptableWorkflow"/> identity, apart from
     /// <see cref="ScriptableWorkflow"/> — for the one side of a two-workflow-type test (see
     /// <see cref="AltScriptableWorkflow"/>'s own doc comment) that needs to be registered and
     /// resolved as a genuinely different <c>TWorkflow</c>.
@@ -418,8 +419,8 @@ public abstract class WorkflowActorTestKit : TestKit
     }
 
     /// <summary>
-    /// Delivers a child lifecycle event using the persisted relationship rather than hand-built
-    /// actor-protocol fields. The runtime owns relationship ids and generation values.
+    /// Delivers a child lifecycle event using the persisted relationship, with no hand-built
+    /// actor-protocol fields of its own. The runtime owns relationship ids and generation values.
     /// </summary>
     protected void NotifyChild(
         IActorRef actor,
@@ -446,7 +447,7 @@ public abstract class WorkflowActorTestKit : TestKit
     /// <c>WorkflowEntityActor.HandleDelivery</c> expects — enough to exercise the real send/receive/
     /// confirm code path between two (or more, chained) actual entity actors created directly in this
     /// test process. Shared infra: any test wiring more than one real
-    /// <see cref="WorkflowEntityActor{TWorkflow, TState}"/> together uses this, not just one file's
+    /// <see cref="WorkflowEntityActor{TWorkflow, TState}"/> together uses this, across every file's
     /// worth of scenarios.
     /// </summary>
     protected sealed class RelayProducerAdapter : ReceiveActor

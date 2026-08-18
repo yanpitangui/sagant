@@ -6,8 +6,8 @@ var builder = DistributedApplication.CreateBuilder(args);
 // Program.cs) — Sagant.Runtime.Akka has no opinion on the persistence backend, so this is pure host
 // wiring, nothing engine-side. A fixed password (not Aspire's own per-run random default) keeps a
 // reused data volume's baked-in SCRAM auth in sync with what every run actually connects with; no
-// WithLifetime(ContainerLifetime.Persistent) here either, so the volume itself is also session-scoped
-// rather than surviving across separate `dotnet run`s.
+// WithLifetime(ContainerLifetime.Persistent) here either, so the volume itself is also session-scoped,
+// gone at the end of each separate `dotnet run`.
 // init-scripts/001-orders-schema.sql creates "orders-db" itself and the sample's whole read-model
 // schema (orders/order_items/workflow_views/step_runs/event_log — see OrderReadModelRepository) in
 // one docker-entrypoint-initdb.d pass, ahead of AddDatabase's own (idempotent) CREATE DATABASE below

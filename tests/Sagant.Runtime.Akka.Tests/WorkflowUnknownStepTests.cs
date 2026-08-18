@@ -6,7 +6,7 @@ namespace Sagant.Runtime.Akka.Tests;
 
 /// <summary>
 /// Guarantee E5 through the durable driver: what happens to an instance standing on a step the code
-/// running underneath it no longer registers.
+/// running underneath it has stopped registering.
 ///
 /// This is the shape of a deploy that removed a step while instances were persisted on it — the one
 /// version-skew hazard the engine can see for itself, since it is the engine that goes looking for

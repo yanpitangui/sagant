@@ -8,7 +8,7 @@ durable driver persists (exposed as `harness.Envelope`), decides transitions thr
 `WorkflowTransitionPlanner`, and dispatches through the same generated
 `IWorkflowStepDispatcher<TState>`/`IWorkflowCommandDispatcher<TState>`/`IWorkflowQueryDispatcher<TState>`
 tables production traffic uses. Deadlines, retry budget, pause rules and child-group policy are
-therefore literally the same code, not a matching copy — see
+therefore literally the same code the durable driver runs, with no separate copy to drift — see
 [guarantees.md](guarantees.md) for what that fixes in place.
 
 Prefer this for pure step/command/retry/pause/child-group logic; reach for real Akka test
@@ -37,14 +37,14 @@ Assert.IsType<Transition.TerminalTransition>(effect.Transition);
   same chain `WorkflowEntityActor` would drive in production — until it reaches a pause, end,
   delete, or no-transition, and returns whichever step effect stopped the chain. Use this for
   "does the whole path work" tests.
-- `RunUntilStop(Steps.X)` (overload taking a `StepRef` instead of a command) resumes the step chain
+- `RunUntilStop(Steps.X)` (overload taking a `StepRef` in place of a command) resumes the step chain
   from a specific step — useful for jumping straight into a branch (e.g. a compensation cascade)
-  after hand-seeding `harness.State`, without replaying everything that would normally lead there.
+  after hand-seeding `harness.State`, with none of what would normally lead there replayed.
 - `harness.State` is settable directly for exactly that purpose.
 - `RunQuery<TQuery, TReply>(query)` dispatches a `[WorkflowQuery]` and returns its reply. A query
   cannot persist or transition, so this never advances the harness.
 - `harness.Envelope` exposes the full runtime envelope for asserting on runtime-owned bookkeeping —
-  deadlines, retry count, child relationships — rather than on business state.
+  deadlines, retry count, child relationships — the runtime's own state, apart from business state.
 - `harness.Notifications` collects every notification the planner decided to publish, in order, so a
   test can assert on the lifecycle a subscriber would have observed.
 - The constructor takes an optional `instanceId`, used where a durable driver would use its
@@ -52,8 +52,8 @@ Assert.IsType<Transition.TerminalTransition>(effect.Transition);
 
 ## Queries running alongside a step
 
-A query dispatches immediately rather than waiting for a running step, which is the one concurrency
-the runtime permits. `RunStepInterleaved` opens that window in a test:
+A query dispatches immediately, with no wait for a running step, which is the one concurrency the
+runtime permits. `RunStepInterleaved` opens that window in a test:
 
 ```csharp scaffold=statements
 var reply = OrderStatus.Pending;
@@ -77,8 +77,8 @@ retry budget is exhausted — decided by `WorkflowTransitionPlanner.PlanStepFail
 the durable driver makes. Retries
 run back-to-back with no simulated wait: `RecoverStrategy.BackoffForAttempt` is a pure
 `Func<int, TimeSpan>`, directly unit-testable on its own with no harness involved at all, so the
-harness only needs to exercise the retry/failover *decision*, not the delay. A step with no
-`RecoverStrategy` configured just lets the exception propagate straight to the caller.
+harness only needs to exercise the retry/failover *decision* itself, leaving the delay to that test.
+A step with no `RecoverStrategy` configured just lets the exception propagate straight to the caller.
 
 ```csharp scaffold=test-member
 [Fact]

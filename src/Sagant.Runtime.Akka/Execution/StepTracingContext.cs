@@ -74,10 +74,10 @@ internal sealed class StepTracingContext
     /// to whichever span was active on the parent when it started this child (captured into
     /// <see cref="ChildWorkflowRelationship.TraceParent"/> at <c>AwaitChildren</c> time, carried to
     /// the child on its own <c>WorkflowEnvelope.ParentRelationship</c> — <paramref name="parentRelationship"/>
-    /// here). <paramref name="persistedLastTraceParent"/> is the just-delivered envelope's own
-    /// <c>LastTraceParent</c> — read from there rather than any already-merged copy, since this runs
-    /// before the relationship is merged onto the actor's persisted envelope, so on the very first
-    /// delivery that envelope doesn't have it yet. Gated on it being <c>null</c> — true only before
+    /// here). <paramref name="persistedLastTraceParent"/> is read straight off the just-delivered
+    /// envelope's own <c>LastTraceParent</c>, since this runs before the relationship is merged onto
+    /// the actor's persisted envelope — on the very first delivery, that envelope doesn't have it yet.
+    /// Gated on it being <c>null</c> — true only before
     /// this entity's very first activity has ever completed — so this fires exactly once in the
     /// entity's lifetime with no extra mutable flag needed, and never re-links a later command once
     /// that first activity's outcome has persisted. A fresh child never recovers on its first

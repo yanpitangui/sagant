@@ -70,8 +70,8 @@ public sealed class EffectsBuilder<TState>
 
     /// <summary>
     /// Finish as failed, capturing <paramref name="exception"/> — its type, stack trace and whole
-    /// inner chain — so a caller inspecting the failure later sees what was actually thrown rather
-    /// than a flattened message.
+    /// inner chain — so a caller inspecting the failure later sees exactly what was thrown, in full,
+    /// unflattened.
     /// </summary>
     public TransitionalEffect<TState> Fail(Exception exception) =>
         Build(new Transition.TerminalTransition(

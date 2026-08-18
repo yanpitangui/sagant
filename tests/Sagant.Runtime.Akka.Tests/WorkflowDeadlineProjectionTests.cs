@@ -14,9 +14,9 @@ namespace Sagant.Runtime.Akka.Tests;
 
 /// <summary>
 /// The projection reading deadlines out of the journal. Its lanes are what let unrelated instances
-/// proceed in parallel, and the ordering inside one lane is the whole reason they are hashed rather
-/// than round-robined: applying an instance's disarm before its arm leaves a wake for a deadline
-/// that is gone, and nothing later notices.
+/// proceed in parallel, and the ordering inside one lane is the whole reason they are hashed onto a
+/// lane, every event of one instance landing on the same one: applying an instance's disarm before
+/// its arm leaves a wake for a deadline that is gone, and nothing later notices.
 /// </summary>
 public class WorkflowDeadlineProjectionTests : TestKit
 {
@@ -105,8 +105,8 @@ public class WorkflowDeadlineProjectionTests : TestKit
         var scheduler = new RecordingScheduler();
 
         // Started before the writes, so these arrive through the live phase. The backfill folds
-        // history instead of replaying it, so an instance that paused and resumed before this ran
-        // contributes nothing — which is a different question, covered below.
+        // history, without replaying it event by event, so an instance that paused and resumed
+        // before this ran contributes nothing — which is a different question, covered below.
         Projection(scheduler, lanes).RunAsync().Wait();
 
         Write("order-ordered",
@@ -156,8 +156,8 @@ public class WorkflowDeadlineProjectionTests : TestKit
     }
 
     /// <summary>
-    /// A deadline inside the threshold belongs to the instance's own timer, so the projection retires
-    /// whatever was recorded for it rather than recording a new one.
+    /// A deadline inside the threshold belongs to the instance's own timer, so the projection only
+    /// ever retires whatever was recorded for it — it records nothing new.
     /// </summary>
     [Fact]
     public void ADeadlineInsideTheThreshold_IsRetiredRatherThanRecorded()
@@ -202,7 +202,7 @@ public class WorkflowDeadlineProjectionTests : TestKit
     }
 
     /// <summary>
-    /// The reason the history is folded rather than replayed. An instance that paused and later
+    /// The reason the history is folded, whole, and not replayed event by event. An instance that paused and later
     /// finished is not waiting for anything, so nothing is recorded for it — where replaying its
     /// events one at a time would record the pause, wake it, and only then read the event saying it
     /// had finished. Over a journal of any age that is a wake for a large share of everything that

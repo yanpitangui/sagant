@@ -35,8 +35,8 @@ public sealed class ChildGroupResult
     /// </summary>
     public IReadOnlyList<ChildWorkflowRelationship> Members { get; }
 
-    /// <summary>Built on first use rather than in the constructor, so restoring one of these costs
-    /// nothing until something asks about a member.</summary>
+    /// <summary>Built lazily, on first use, so restoring one of these costs nothing until something
+    /// asks about a member.</summary>
     private IReadOnlyDictionary<string, ChildWorkflowRelationship> ById =>
         _byId ??= Members.ToDictionary(m => m.ChildWorkflowId);
 

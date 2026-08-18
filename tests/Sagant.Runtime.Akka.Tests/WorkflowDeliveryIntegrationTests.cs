@@ -20,10 +20,10 @@ public sealed record DeliveryEchoState(string Value)
     public DeliveryEchoState() : this("initial") { }
 }
 
-// Top-level, not nested: the source generator only handles top-level partial classes today — same
-// reason EchoWorkflow.cs itself is top-level. Deliberately a separate fixture from EchoWorkflow
-// (shared by WorkflowClientTests): its reply must genuinely depend on the command payload rather
-// than being the literal constant "accepted", otherwise a reply1 == reply2 assertion across two
+// Top-level: the source generator only handles top-level partial classes today — same reason
+// EchoWorkflow.cs itself is top-level. Deliberately a separate fixture from EchoWorkflow
+// (shared by WorkflowClientTests): its reply must genuinely depend on the command payload, staying
+// clear of the literal constant "accepted", otherwise a reply1 == reply2 assertion across two
 // different payloads under the same idempotency key can't distinguish "replayed the cached reply"
 // from "handler genuinely re-ran on different input and coincidentally produced the same constant
 // back" — see WorkflowDeliveryIntegrationTests's idempotency-replay tests.
@@ -75,7 +75,7 @@ public class WorkflowDeliveryIntegrationTests
         // `using` here alone isn't enough for the failure-during-startup case this guards against —
         // a `using var host = hostBuilder.Build();` local would still leak if StartAsync or the
         // cluster-up wait below throws before this method returns, because the `using` block's
-        // scope ends at the method boundary, not at the return statement's caller. Building the
+        // scope ends at the method boundary, well after the return statement's own caller. Building the
         // host, then immediately entering try/finally around everything that can throw, is what
         // actually guarantees StopAsync/Dispose run on any failure path.
         var host = hostBuilder.Build();
@@ -150,10 +150,10 @@ public class WorkflowDeliveryIntegrationTests
             var reply2 = await handle.Request<DeliveryEchoPing, string>(new DeliveryEchoPing("hello-again"), TimeSpan.FromSeconds(15), idempotencyKey: "key-1");
 
             Assert.Equal("accepted:hello", reply1);
-            Assert.Equal(reply1, reply2); // replayed the cached "accepted:hello" reply, not "accepted:hello-again" from a fresh handler invocation
+            Assert.Equal(reply1, reply2); // replayed the cached "accepted:hello" reply, never re-invoking the handler for "accepted:hello-again"
 
             var status = await handle.GetStatus(TimeSpan.FromSeconds(15));
-            Assert.Equal(WorkflowStatus.Finished, status); // the EchoStep transition from the first Request has landed; also proves the entity answers control commands, not just business ones
+            Assert.Equal(WorkflowStatus.Finished, status); // the EchoStep transition from the first Request has landed; also proves the entity answers control commands as well as business ones
         }
         finally
         {
@@ -172,7 +172,7 @@ public class WorkflowDeliveryIntegrationTests
         // must recover WorkflowRuntimeState (including IdempotencyLedger/HighestAppliedSeqNr) from the
         // InMemory journal/snapshot store before it can answer — this is the same recovery path a real
         // crash-and-restart or ClusterSharding rebalance goes through, just triggered deterministically
-        // via idle passivation instead of killing the process.
+        // via idle passivation, with the process itself left running.
         var hostBuilder = Host.CreateApplicationBuilder();
         hostBuilder.Services.AddAkka("delivery-restart-test", builder =>
         {
@@ -213,7 +213,7 @@ public class WorkflowDeliveryIntegrationTests
 
             var reply2 = await handle.Request<DeliveryEchoPing, string>(new DeliveryEchoPing("hello-again"), TimeSpan.FromSeconds(15), idempotencyKey: "restart-key-1");
 
-            Assert.Equal(reply1, reply2); // recovered ledger still replays "accepted:hello", not "accepted:hello-again", after a real actor stop/restart
+            Assert.Equal(reply1, reply2); // recovered ledger still replays "accepted:hello" after a real actor stop/restart, with the handler left uninvoked
         }
         finally
         {

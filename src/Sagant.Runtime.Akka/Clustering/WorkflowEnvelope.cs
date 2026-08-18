@@ -16,8 +16,8 @@ namespace Sagant.Runtime.Akka.Clustering;
 /// <c>WorkflowProducerAdapter</c>): <see cref="ReplyTo"/> carries the original caller's ephemeral
 /// promise-actor ref, since <c>Akka.Delivery</c> provides no reply-to correlation of its own — the
 /// <c>Sender</c> a <see cref="WorkflowEntityActor{TWorkflow, TState}"/> sees on a
-/// <c>ConsumerController.Delivery&lt;T&gt;</c> is the internal <c>ConsumerController</c>, not the
-/// original caller. <c>null</c> for fire-and-forget <c>Send</c>, and always <c>null</c> for the
+/// <c>ConsumerController.Delivery&lt;T&gt;</c> is always the internal <c>ConsumerController</c> itself.
+/// <c>null</c> for fire-and-forget <c>Send</c>, and always <c>null</c> for the
 /// still-plain <c>Suspend</c>/<c>Resume</c>/<c>Terminate</c>/<c>GetStatus</c> path (Akka's own
 /// implicit <c>Sender</c> chaining still works there — see the design doc's Scope section).
 /// <see cref="IdempotencyKey"/> is caller-supplied, opt-in, only meaningful on the Delivery path.

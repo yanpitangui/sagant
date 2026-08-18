@@ -34,8 +34,8 @@ public partial class ScheduledTaskWorkflow : Workflow<TaskState>
 }
 
 /// <summary>
-/// A schedule driven by the real runtime rather than the harness: its own entity, its own journal,
-/// and a target started through the client.
+/// A schedule driven by the real runtime — its own entity, its own journal, and a target started
+/// through the client — not the harness.
 ///
 /// The harness settles the arithmetic — which instant is next, what is skipped. What it cannot show
 /// is that an occurrence reaches its target at all, which is the part every other piece is in service
@@ -139,8 +139,8 @@ public class ScheduleWorkflowRuntimeTests
                         new EverySpec(TimeSpan.FromSeconds(6)), new RunTask()),
                     TimeSpan.FromSeconds(15));
 
-            // Read through the journal rather than the instance, so watching for the fire does not
-            // itself keep the schedule resident — which would be the thing under test doing nothing.
+            // Read through the journal directly, so watching for the fire does not itself keep the
+            // schedule resident — which would be the thing under test doing nothing.
             var visibility = JournalWorkflowVisibilityQuery.For(system, InMemoryReadJournal.Identifier);
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
 

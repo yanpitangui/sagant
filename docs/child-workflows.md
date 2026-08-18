@@ -105,7 +105,7 @@ public StepEffect<OrderState> OnLineItemsDone(ChildGroupResult result)
 }
 ```
 
-`Get`/`GetAll` throw one of three specific exceptions rather than an unqualified cast failure:
+`Get`/`GetAll` throw one of three specific exceptions, each named for what actually went wrong:
 
 - `ChildNotInGroupException` — the `workflowId` isn't a member of this group (typically a typo).
 - `ChildWorkflowTypeMismatchException` — the member exists, but its actual persisted workflow type
@@ -128,8 +128,8 @@ Set per child at `Child<TWorkflow>(...)` call time, matching Temporal's own per-
 
 There's no cooperative-cancel value: this project's `Terminate` is already unconditional, bypassing
 business code entirely, same as an operator-invoked `Terminate`. A cooperative cancel primitive
-(one that lets the child's own business logic decide how to unwind) is a documented gap, not yet
-built.
+(one that lets the child's own business logic decide how to unwind) is a documented gap, still
+awaiting an implementation.
 
 ## Nesting
 
@@ -143,8 +143,8 @@ every workflow gets — there's no separate API for "a child that's also a paren
 `ParentClosePolicy.Terminate` cascades through however many levels exist: every workflow instance
 runs the identical `WorkflowEntityActor<TWorkflow, TState>` type, so a `Terminate` a grandparent
 sends to its child causes that child's own `HandleTerminate` to apply its own `ParentClosePolicy` to
-its own children in turn, sending `Terminate` onward — the same logic runs at every level, not a
-special case for depth. `WorkflowTestHarness.WithChild` composes the same way: the child harness is
+its own children in turn, sending `Terminate` onward — the same logic runs at every level, uniformly,
+with no special case for depth. `WorkflowTestHarness.WithChild` composes the same way: the child harness is
 just another `WorkflowTestHarness<TChildWorkflow, TChildState>`, so it can register its own children
 via its own `WithChild` call.
 

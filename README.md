@@ -65,7 +65,7 @@ public partial class OrderFulfillmentWorkflow : Workflow<OrderState>
 `Steps.ChargePaymentStep` and friends are generated for you — a typed reference to each
 `[WorkflowStep]` method, so transitions never rely on magic strings. See
 [`docs/workflow-model.md`](docs/workflow-model.md#the-source-generator) for how the generator works,
-and [`docs/workflow-model.md#effects-not-direct-mutation`](docs/workflow-model.md#effects-not-direct-mutation)
+and [`docs/workflow-model.md#effects-applied-by-the-driver`](docs/workflow-model.md#effects-applied-by-the-driver)
 for the full set of transitions a handler can produce (pause, delete, await-children, and so on —
 not just the transition-to-next-step and end shown above).
 
@@ -85,7 +85,7 @@ State reaches a handler as a value on its context, never as shared instance stat
 suspended at an `await` and a handler dispatched while it waits cannot observe each other.
 
 `QueryEffect` carries a reply and nothing else — no persistence, no transition. That's a compile-time
-property, and it's what lets a query dispatch immediately instead of queueing behind a running step:
+property, and it's what lets a query dispatch immediately, with no running step to queue behind:
 there's no write for it to race with. Reach for a query for anything a caller reads (a live progress
 view, a dashboard poll); reach for a command when the workflow should move.
 
@@ -107,8 +107,8 @@ Retries, backoff, per-step timeout overrides, and pause-with-timeout are all con
 ```csharp scaffold=statements
 services.AddSingleton<IPaymentService, RealPaymentService>();
 
-// (builder, IServiceProvider) overload, not the plain Action<AkkaConfigurationBuilder> one, so the
-// workflow factory can resolve dependencies from DI.
+// The (builder, IServiceProvider) overload, so the workflow factory can resolve dependencies from
+// DI — the plain Action<AkkaConfigurationBuilder> overload has no IServiceProvider to give it.
 services.AddAkka("my-system", (builder, sp) => builder
     .WithClustering()
     .WithWorkflow<OrderFulfillmentWorkflow, OrderState>(() =>
@@ -135,8 +135,8 @@ var status = await client.For<OrderFulfillmentWorkflow>(orderId)
     .Query<GetProgress, OrderStatus>(new GetProgress(), TimeSpan.FromSeconds(5));
 ```
 
-A query takes a different route than a command — delivered directly rather than through the
-at-least-once machinery (guaranteed delivery of a read buys nothing) and dispatched without waiting
+A query takes a different route from a command — delivered directly, bypassing the at-least-once
+machinery entirely (guaranteed delivery of a read buys nothing), and dispatched with no wait
 for a running step. It also carries no idempotency key: replaying a read has no side effect to
 deduplicate. Its handler is bounded by the workflow's own `DefaultQueryTimeout`, because a caller's
 timeout ends the caller's wait and never reaches the workflow.

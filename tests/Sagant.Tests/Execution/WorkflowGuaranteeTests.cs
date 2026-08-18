@@ -10,8 +10,9 @@ namespace Sagant.Tests.Execution;
 /// The guarantees in <c>docs/guarantees.md</c>, asserted directly against
 /// <see cref="WorkflowTransitionPlanner"/>. Each test names the guarantee it holds.
 ///
-/// These run against the pure planner rather than through a driver, which is the point: a guarantee
-/// that only holds because of how one driver happens to be wired is not a guarantee. Every driver
+/// These run against the pure planner directly, with no driver in between, which is the point: a
+/// guarantee that only held because of how one driver happens to be wired would be no guarantee at
+/// all. Every driver
 /// reaches these decisions through this one function, so proving it here proves it for all of them —
 /// in milliseconds, with no <c>ActorSystem</c> and no persistence.
 /// </summary>
@@ -211,8 +212,8 @@ public class WorkflowGuaranteeTests
 
     // ── E5 ───────────────────────────────────────────────────────────────────────────────────────
 
-    /// <summary>An instance standing on a step the deployed code no longer registers is held at that
-    /// step. A deploy that drops a step stalls the runs sitting on it, and each one keeps its state,
+    /// <summary>An instance standing on a step the deployed code has stopped registering is held at
+    /// that step. A deploy that drops a step stalls the runs sitting on it, and each one keeps its state,
     /// its step and that step's input for whoever puts the step back.</summary>
     [Fact]
     public void E5_AnUnknownStepName_ParksTheRunAtThatStep()
@@ -261,8 +262,9 @@ public class WorkflowGuaranteeTests
 
     // ── G3 / park on exhausted retries ───────────────────────────────────────────────────────────
 
-    /// <summary>A step that exhausts its budget under a parking strategy holds the instance instead
-    /// of ending it, so a transient problem outside the workflow stays fixable. The step name and
+    /// <summary>A step that exhausts its budget under a parking strategy holds the instance in place,
+    /// keeping the run alive, so a transient problem outside the workflow stays fixable. The step
+    /// name and
     /// input survive, which is what lets Resume re-run exactly the attempt that failed.</summary>
     [Fact]
     public void ExhaustedRetriesUnderParking_SuspendsTheRunAtItsFailedStep()
@@ -299,7 +301,7 @@ public class WorkflowGuaranteeTests
 
     /// <summary>Resuming a parked run re-runs the failed step with a fresh budget — the existing
     /// Resume path (guarantee E4), so parking needs no control command of its own. The failure is
-    /// cleared, since the run is no longer parked on it.</summary>
+    /// cleared along with it, since the run has left the parked state that failure explained.</summary>
     [Fact]
     public void ResumingAParkedRun_RetriesTheFailedStepAndClearsTheFailure()
     {
@@ -655,7 +657,8 @@ public class WorkflowGuaranteeTests
         Assert.Equal("AutoCancel", Assert.IsType<Transition.StepTransition>(transition).StepName);
     }
 
-    /// <summary>A pause timer that outlived its pause is a stale no-op, not a transition.</summary>
+    /// <summary>A pause timer that outlived its pause is a stale no-op — it produces no transition
+    /// at all.</summary>
     [Fact]
     public void PauseTimeout_DoesNothingOnceTheInstanceHasResumed()
     {
@@ -756,8 +759,8 @@ public class WorkflowGuaranteeTests
         Assert.Equal("customer changed mind", Assert.IsType<WorkflowCancellation>(step.Input).Reason);
     }
 
-    /// <summary>Nothing to unwind still reports Cancelled, not Terminated: what was asked for is
-    /// worth recording even where the effect was the same.</summary>
+    /// <summary>Nothing to unwind still reports Cancelled, distinct from Terminated: what was asked
+    /// for is worth recording even where the effect ends up the same.</summary>
     [Fact]
     public void E9_Cancel_WithNoCancellationStep_FinishesAsCancelled()
     {
@@ -777,7 +780,7 @@ public class WorkflowGuaranteeTests
     }
 
     /// <summary>The compensation step decides the run's final outcome, so a compensation that failed
-    /// reports a failure rather than the runtime insisting the cancel was clean.</summary>
+    /// reports that failure — the runtime never overrides it to insist the cancel was clean.</summary>
     [Fact]
     public void E9_CancellationStep_MayFinishAsFailedInsteadOfCancelled()
     {

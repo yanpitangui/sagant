@@ -16,8 +16,8 @@ internal static class DeadlineBucket
     /// <summary>
     /// How much time one bucket covers. Sets both the granularity of a wake and how many entities the
     /// ticker touches: a shorter interval fires nearer the deadline and pokes more buckets, and each
-    /// instance's own timer covers the remainder of the slice either way, so the wake still lands on
-    /// the instant rather than on the boundary.
+    /// instance's own timer covers the remainder of the slice either way, so the wake lands precisely
+    /// on the instant — the bucket's own boundary only bounds how early the ticker's poke can arrive.
     /// </summary>
     public static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
 
@@ -50,8 +50,8 @@ internal static class DeadlineBucket
     /// falls in, oldest first, capped at <paramref name="max"/>.
     ///
     /// This is how a ticker catches up: it holds the last bucket it poked, so a process that was down
-    /// for an hour walks the hour it missed rather than skipping to the present. The cap bounds one
-    /// pass, and the remainder is picked up by the next.
+    /// for an hour walks every bucket across that hour on its way back to the present. The cap bounds
+    /// one pass, and the remainder is picked up by the next.
     /// </summary>
     public static IReadOnlyList<string> Between(DateTimeOffset after, DateTimeOffset now, int max)
     {

@@ -9,20 +9,19 @@ using Akka.Streams;
 
 namespace Sagant.Runtime.Akka.Deadlines;
 
-/// <summary>How far the projection has read. Recorded so a restart resumes rather than re-reads.</summary>
+/// <summary>How far the projection has read. Recorded so a restart resumes from here.</summary>
 internal sealed record ProjectionAdvanced(long Offset);
 
 /// <summary>
 /// Owns the deadline projection and remembers how far it has read.
 ///
 /// A cluster singleton, for two reasons that both come down to the journal. One reader means the
-/// stream is read once rather than once per node, and one reader means one position to remember —
-/// two readers would each hold their own and neither would be the truth.
+/// stream is read once, total, across the cluster, and one reader means a single position to
+/// remember — two readers would each hold their own, and neither would be the truth.
 ///
 /// The position is what keeps a restart cheap. Reading from the start is right exactly once, when
-/// there is no position yet and instances may already be waiting; every start after that resumes,
-/// so the cost of coming back is the events since the last one rather than a journal that only
-/// grows.
+/// there is no position yet and instances may already be waiting; every start after that resumes
+/// from the recorded position, so the cost of coming back is only the events since the last one.
 /// </summary>
 internal sealed class DeadlineProjectionHostActor : ReceivePersistentActor
 {
@@ -46,8 +45,9 @@ internal sealed class DeadlineProjectionHostActor : ReceivePersistentActor
         _settings = settings;
         _projectionFactory = projectionFactory;
 
-        // See DeadlineBucketActor: a journal hands recovery the Tagged wrapper rather than the
-        // payload, so both shapes are handled.
+        // See DeadlineBucketActor: a journal that indexes tags lifts them off on the way to recovery
+        // and hands back the plain payload; one with no tag support hands back the Tagged wrapper as
+        // written. Both shapes are handled here.
         Recover<Tagged>(t =>
         {
             if (t.Payload is ProjectionAdvanced advanced)
@@ -105,8 +105,8 @@ internal sealed class DeadlineProjectionHostActor : ReceivePersistentActor
     }
 
     /// <summary>
-    /// Reports an applied offset to this actor rather than writing from the stream, so the position
-    /// is recorded on the actor's own thread like everything else it holds.
+    /// Reports an applied offset to this actor, so the position is recorded on the actor's own
+    /// thread, the same as everything else it holds.
     /// </summary>
     private static NotUsed Advance(IActorRef self, Offset applied)
     {

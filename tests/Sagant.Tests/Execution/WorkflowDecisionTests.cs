@@ -4,9 +4,10 @@ using Sagant.Protocol;
 namespace Sagant.Tests.Execution;
 
 /// <summary>
-/// The decisions that carry an enum and nothing else are held as one value per case, so a plan reads
-/// them instead of building them. What that relies on is the value being equal to a freshly built one
-/// — a driver pattern-matches decisions and compares them, and a test asserts on them.
+/// The decisions that carry an enum and nothing else are held as one value per case, built once and
+/// shared, so a plan reads that value directly on every call. What this relies on is that shared
+/// value being equal to a freshly built one — a driver pattern-matches decisions and compares them,
+/// and a test asserts on them.
 /// </summary>
 public class WorkflowDecisionTests
 {

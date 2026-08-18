@@ -92,7 +92,7 @@ builder.Services.AddAkka("order-fulfillment-demo", (akkaBuilder, sp) =>
             // Ten seconds, well under the 120-second default, so an order awaiting approval
             // passivates halfway through its 20-second approval window. The deadline scheduler
             // registered below is then what brings it back to auto-cancel — the demo shows a
-            // deadline firing for an instance that is no longer in memory.
+            // deadline firing for an instance that has already left memory by the time it lands.
             configureShardOptions: options => options.PassivateIdleEntityAfter = TimeSpan.FromSeconds(10))
         // A second WithWorkflow call for a different workflow type on the same ActorSystem — see
         // WorkflowEventPubSubBridge's own doc comment confirming exactly one bridge instance
@@ -176,7 +176,8 @@ DistributedPubSub.Get(system).Mediator.Tell(
 
 // The durable half of the same feed closes that gap. Reading the recorded events replays every
 // workflow this cluster has run into this replica's read model, so a replica joining late — or
-// restarting — arrives with a complete view rather than only what happened while it was watching.
+// restarting — arrives with a complete view, going all the way back, well beyond only what
+// happened while it was watching.
 //
 // Replaying what the journal still holds is what makes this a demonstration of recorded events
 // outliving the process that wrote them: the read model is derived data, rebuildable from them.
@@ -218,17 +219,18 @@ _ = Task.Run(async () =>
 //
 // The same command every time, so each occurrence's own entity id is what separates the runs — and
 // that id comes from the instant the occurrence was scheduled for, so a fire that happens twice
-// lands on the same order rather than placing two.
+// still lands on that same one order, never placing a second.
 //
 // Idempotent on a restart: the schedule has a fixed id, so a replica coming up sends StartSchedule
-// to the instance that already exists and replaces its spec rather than starting a second one.
+// to the instance that already exists and replaces its spec there, with no second one started.
 _ = Task.Run(async () =>
 {
     try
     {
         var client = app.Services.GetRequiredService<IWorkflowClient>();
 
-        // Asked rather than sent, so a schedule that never reaches its entity says so here. A
+        // Asked, so a schedule that never reaches its entity says so here — a plain sent gets no
+        // such answer. A
         // fire-and-forget send would sit buffered behind a shard region still finding its
         // coordinator and report nothing, which reads as a schedule that simply never fires.
         var accepted = await client.For<ScheduleWorkflow>("standing-order").Request<StartSchedule, string>(
@@ -236,24 +238,25 @@ _ = Task.Run(async () =>
                 spec: new EverySpec(TimeSpan.FromSeconds(15)),
                 command: new PlaceOrder(
                     CustomerId: "standing-order-customer",
-                    // An array rather than a collection expression: targeting IReadOnlyList<T> with
-                    // one element compiles to a compiler-generated list type the JSON serializer
-                    // cannot construct on the way back. A schedule stores its command and replays it
-                    // from the journal, so what it holds has to survive a round trip.
+                    // An array: targeting IReadOnlyList<T> with a collection expression instead
+                    // compiles to a compiler-generated list type the JSON serializer cannot
+                    // construct on the way back. A schedule stores its command and replays it from
+                    // the journal, so what it holds has to survive a round trip.
                     Items: new[] { new OrderLineItem("SKU-STANDING", 1) },
                     ShippingAddress: "1 Recurring Way"),
                 // Fifteen seconds is close enough to how long an order takes that this matters: an
-                // occurrence arriving while the previous one is still running is passed over rather
-                // than run alongside it. A skipped occurrence is counted, so the schedule's status
+                // occurrence arriving while the previous one is still running is passed over,
+                // never run alongside it. A skipped occurrence is counted, so the schedule's status
                 // says so.
                 overlap: OverlapPolicy.Skip,
-                // A replica down for a while places one order on the way back, rather than the
-                // dozens it slept through.
+                // A replica down for a while places one order on the way back — the catch-up window
+                // caps it there, well short of the dozens it slept through.
                 catchUpWindow: TimeSpan.FromSeconds(30)),
             timeout: TimeSpan.FromSeconds(90));
 
-        // Read back rather than assumed: this says when the first occurrence is actually due, which
-        // is the difference between a schedule that is waiting and one that was never started.
+        // Read back — genuinely, never assumed — this says when the first occurrence is actually
+        // due, which is the difference between a schedule that is waiting and one that was never
+        // started.
         var status = await client.For<ScheduleWorkflow>("standing-order")
             .Query<GetScheduleStatus, ScheduleStatus>(new GetScheduleStatus(), TimeSpan.FromSeconds(30));
 

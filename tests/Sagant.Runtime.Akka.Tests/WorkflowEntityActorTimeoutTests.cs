@@ -7,8 +7,8 @@ using Sagant.Runtime.Akka.Tests.Support;
 namespace Sagant.Runtime.Akka.Tests;
 
 /// <summary>
-/// Uses <see cref="TestScheduler"/> (virtual time, advanced explicitly) instead of real wall-clock
-/// delays, so timeout firing is deterministic and these tests don't need to actually wait.
+/// Uses <see cref="TestScheduler"/> — virtual time, advanced explicitly, in place of real wall-clock
+/// delays — so timeout firing is deterministic and these tests don't need to actually wait.
 /// </summary>
 public class WorkflowEntityActorTimeoutTests : WorkflowActorTestKit
 {
@@ -193,9 +193,9 @@ public class WorkflowEntityActorTimeoutTests : WorkflowActorTestKit
         // A workflow-level timeout shorter than a pause window is a realistic, legitimate
         // combination (e.g. "finish within 5 minutes of active work" + "but allow up to 24h for
         // human approval") — the workflow timeout must not preempt the pause, since it's a ceiling
-        // on active processing time, not on time spent waiting for a human. Regression test for a
-        // real bug found building the OrderFulfillment sample: the workflow timeout used to fire
-        // even while paused, jumping straight to its own failover step and skipping the pause's
+        // on active processing time alone, leaving time spent waiting for a human untouched.
+        // Regression test for a real bug found building the OrderFulfillment sample: the workflow
+        // timeout fired even while paused, jumping straight to its own failover step and skipping the pause's
         // own timeout handler entirely.
         var pauseSettings = PauseSettings.WithTimeout(TimeSpan.FromHours(1)).TimeoutHandler(Step("AutoCancel"));
         var script = Script()

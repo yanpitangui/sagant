@@ -2,7 +2,8 @@ namespace Sagant.Protocol;
 
 /// <summary>
 /// Engine-level query for a workflow's current <c>TState</c> — same role as <see cref="GetStatus"/>
-/// one level down, returning the business state itself rather than the engine's lifecycle status.
+/// one level down, returning the business state itself, where <see cref="GetStatus"/> returns the
+/// engine's lifecycle status.
 /// Public, generic across every workflow, no per-workflow handler needed: a runtime driver replies
 /// with the raw, currently-persisted state, boxed the same way any command reply already is.
 ///

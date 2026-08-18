@@ -7,7 +7,7 @@ namespace Sagant.Tests.Protocol;
 ///
 /// A status arrives as <c>default</c> in more places than a construction site: a value type nobody
 /// assigned, a field a serializer left alone, an id whose history is gone. Whatever the zero value is
-/// becomes the answer in all of them at once, which makes it worth pinning here rather than leaving to
+/// becomes the answer in all of them at once, which is worth pinning down here, once, for
 /// whoever next adds a member to the enum.
 /// </summary>
 public class WorkflowStatusTests

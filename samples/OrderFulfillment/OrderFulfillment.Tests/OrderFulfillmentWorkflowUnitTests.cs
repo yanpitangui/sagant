@@ -6,8 +6,8 @@ namespace OrderFulfillment.Tests;
 
 /// <summary>
 /// Same workflow, same fakes as <see cref="OrderFulfillmentWorkflowTests"/> — but driven through
-/// <see cref="WorkflowTestHarness{TWorkflow,TState}"/> instead of a real (even if in-mem)
-/// <c>ClusterSharding</c> region. No <c>ActorSystem</c>, no persistence, no <c>await Task.Delay</c>
+/// <see cref="WorkflowTestHarness{TWorkflow,TState}"/>, with no real <c>ClusterSharding</c> region
+/// behind it, in-mem or otherwise. No <c>ActorSystem</c>, no persistence, no <c>await Task.Delay</c>
 /// polling loops (retries run back-to-back with no simulated wait — see the harness's own doc
 /// comment) — every test here runs in milliseconds, including
 /// <see cref="ItemFulfillmentWorkflow"/>'s own retry-then-failover-to-<c>ReleaseItemStep</c> cascade.
@@ -148,8 +148,8 @@ public class OrderFulfillmentWorkflowUnitTests
         };
 
         // ChargePaymentStep's RecoverStrategy allows 2 retries before failing over — permanent mode
-        // never disarms, so all 3 attempts throw and the harness itself fails over to RefundPaymentStep
-        // instead of propagating the exception.
+        // never disarms, so all 3 attempts throw and the harness itself fails over to
+        // RefundPaymentStep, swallowing the exception on the way.
         var effect = await harness.RunStep(OrderFulfillmentWorkflow.Steps.ChargePaymentStep);
 
         Assert.Equal(

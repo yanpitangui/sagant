@@ -12,7 +12,7 @@ namespace Sagant.Runtime.Akka.ChaosTests;
 /// and asserts the same invariants over all of them.
 ///
 /// Every assertion is on recorded events, read once the cluster is quiet. Nothing here waits on a
-/// timing window, so a slow machine makes the test slower rather than flakier.
+/// timing window, so a slow machine only makes the test slower, never flakier.
 /// </summary>
 [Collection(PostgresJournalCollection.Name)]
 public class FleetUnderFaultTests
@@ -60,7 +60,7 @@ public class FleetUnderFaultTests
 
         try
         {
-            // Quiescence, not a fixed sleep: the fleet is done when every instance stops moving.
+            // Quiescence-based: the fleet is done when every instance stops moving, whenever that is.
             await AwaitQuiescence(survivor!, ids, TimeSpan.FromSeconds(90));
 
             foreach (var id in ids)

@@ -75,8 +75,8 @@ public class WorkflowHoldTimeoutTests : WorkflowActorTestKit
 
     /// <summary>
     /// Releasing the hold ends its wait, so a timer that fires after the release finds nothing to do.
-    /// The envelope keeps the instant it recorded, which is why the planner keys off status rather
-    /// than off that field.
+    /// The envelope keeps the instant it recorded, which is why the planner keys off status, treating
+    /// that field as informational only.
     /// </summary>
     [Fact]
     public void AHoldReleasedBeforeItsDeadline_NeverRunsThatStep()

@@ -12,8 +12,8 @@ namespace Sagant.Runtime.Akka.ChaosTests;
 /// the history behind it possibly still there. Guarantee <c>E11</c> claims that costs disk and
 /// nothing else — a crash replays the old events plus the restart and folds to the same envelope.
 ///
-/// Asserted after everything settles rather than during, so what is checked is the record the
-/// cluster actually kept rather than whatever a probe caught mid-flight.
+/// Asserted once everything settles, so what is checked is the durable record the cluster actually
+/// kept, standing apart from whatever a probe caught mid-flight.
 /// </summary>
 [Collection(PostgresJournalCollection.Name)]
 public class RestartUnderCrashTests
@@ -37,8 +37,8 @@ public class RestartUnderCrashTests
         int cycleBeforeCrash;
         try
         {
-            // Request rather than Send: the reply confirms the command reached its handler, so a
-            // workflow that never started is distinguishable from one whose history cannot be read.
+            // Request, whose reply confirms the command reached its handler, so a workflow that never
+            // started is distinguishable from one whose history cannot be read.
             var accepted = await first.Client.For<RestartingWorkflow>(entityId)
                 .Request<BeginCycling, string>(new BeginCycling(cycles), TimeSpan.FromSeconds(30));
             Assert.Equal("accepted", accepted);
@@ -116,8 +116,8 @@ public class RestartUnderCrashTests
             }
 
             // Every cycle writes at least a state change and a restart. Holding fewer events than
-            // that product means history behind the current cycle really was released, rather than
-            // accumulating under a workflow that never ends.
+            // that product means history behind the current cycle really was released — an
+            // accumulating workflow that never ends would keep growing past this bound.
             Assert.True(
                 recorded.Count < state.Cycle * 2,
                 $"{recorded.Count} events retained across {state.Cycle} cycles; a restart is meant to "

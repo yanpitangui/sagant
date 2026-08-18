@@ -49,8 +49,8 @@ public static class WorkflowEventTags
     /// belongs in the deadline stream.
     ///
     /// Kept in step with <see cref="WorkflowDeadlineFold"/>, which computes the change this tag lets
-    /// a reader see. Every case is named rather than folded into a predicate, so checking the two
-    /// against each other is comparing two lists.
+    /// a reader see. Every case is named here explicitly, so checking the two against each other is
+    /// comparing two lists.
     /// </summary>
     public static bool MovesADeadline(WorkflowEvent @event) => @event switch
     {

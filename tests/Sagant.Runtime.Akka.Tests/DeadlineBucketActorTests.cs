@@ -9,9 +9,9 @@ using Sagant.Runtime.Akka.Tests.Support;
 namespace Sagant.Runtime.Akka.Tests;
 
 /// <summary>
-/// The bucket holding one slice of time, driven directly rather than through sharding — its recovery
-/// path, its retry of a wake nobody answered, and the point at which it lets an entry go. None of
-/// that runs in the end-to-end test, which only ever sees a bucket that works.
+/// The bucket holding one slice of time, driven directly here, with no sharding in between — its
+/// recovery path, its retry of a wake nobody answered, and the point at which it lets an entry go.
+/// None of that runs in the end-to-end test, which only ever sees a bucket that works.
 /// </summary>
 public class DeadlineBucketActorTests : TestKit
 {
@@ -44,7 +44,7 @@ public class DeadlineBucketActorTests : TestKit
         Sys.ActorOf(DeadlineBucketActor.Props(
             bucketId, settings ?? Settings(), client, clock ?? new FixedClock(Noon)));
 
-    /// <summary>A clock a test moves explicitly, so "due" is decided by the test rather than by
+    /// <summary>A clock a test moves explicitly, so "due" is decided by the test itself, immune to
     /// wall-clock drift during it.</summary>
     private sealed class FixedClock(DateTimeOffset now) : TimeProvider
     {
@@ -120,7 +120,7 @@ public class DeadlineBucketActorTests : TestKit
             () => Assert.True(client.Attempts >= 3, $"only {client.Attempts} attempts"),
             TimeSpan.FromSeconds(10));
 
-        // Stops climbing once the budget is spent rather than retrying forever.
+        // Stops climbing once the budget is spent — no retrying forever.
         var settled = client.Attempts;
         Thread.Sleep(500);
         Assert.True(client.Attempts <= settled + 1, $"kept trying: {settled} then {client.Attempts}");

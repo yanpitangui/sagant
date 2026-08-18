@@ -93,7 +93,7 @@ public class SerializationRoundTripTests : TestKit
     /// The case this exists for. A collection expression assigned to an
     /// <see cref="IReadOnlyList{T}"/> member compiles to a compiler-generated type with no public
     /// constructor: the default serializer writes it and cannot read it back. Nothing about the
-    /// declaration hints at it, and the failure otherwise surfaces at a recovery rather than here.
+    /// declaration hints at it, and the failure otherwise surfaces at a recovery, far downstream.
     /// </summary>
     [Fact]
     public void ARecordHoldingACollectionExpression_IsCaughtHereRatherThanAtRecovery()

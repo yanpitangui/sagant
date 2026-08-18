@@ -18,7 +18,7 @@ public class WorkflowTests
     /// A fresh instance starts at whatever the workflow says empty means. There is no default: the
     /// member is abstract precisely because <c>default(TState)</c> is <c>null</c> for the record
     /// types state is usually written as, and a workflow that omitted it would fail inside its first
-    /// step rather than at the declaration that caused it.
+    /// step — far from the declaration that caused it.
     /// </summary>
     [Fact]
     public void EmptyState_ComesFromTheWorkflow()
@@ -65,8 +65,8 @@ public class WorkflowTests
         Assert.NotNull(workflow.PublicQueryEffects);
     }
 
-    /// <summary>The query builder carries nothing between calls, so every access hands back the one
-    /// shared instance rather than allocating per handler invocation.</summary>
+    /// <summary>The query builder carries nothing between calls, so every access hands back the same
+    /// shared instance, with nothing allocated per handler invocation.</summary>
     [Fact]
     public void QueryEffects_IsASharedInstance()
     {

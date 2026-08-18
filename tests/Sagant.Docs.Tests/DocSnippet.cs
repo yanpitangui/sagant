@@ -42,7 +42,7 @@ public sealed record DocSnippet(
 /// Markdown renderers take the first word as the language and ignore the rest, so this is invisible
 /// on GitHub while still being explicit in the source.
 ///
-/// A block with no <c>scaffold=</c> is an error rather than a default. A snippet that nothing checks
+/// A block with no <c>scaffold=</c> is an error — it has no default. A snippet that nothing checks
 /// is how the documentation drifted in the first place, so the failure has to happen when the block
 /// is written.
 /// </summary>
@@ -255,8 +255,8 @@ public static class DocSnippetExtractor
     }
 
     /// <summary>
-    /// The names a caller-side snippet writes without introducing. Emitted as fields rather than
-    /// locals, so a snippet opening with <c>var harness = ...</c> shadows one legally.
+    /// The names a caller-side snippet writes without introducing. Emitted as fields, so a snippet
+    /// opening with <c>var harness = ...</c> shadows one legally.
     /// </summary>
     private const string Ambient = """
         public abstract class DocStatementsAmbient

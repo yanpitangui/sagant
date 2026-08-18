@@ -15,8 +15,8 @@ namespace Sagant.Runtime.Akka.Execution;
 /// <c>Transition.StepTransition</c> — stays on <c>WorkflowEntityActor.ApplyChildLifecycleNotification</c>,
 /// since that's tied directly to the actor's own persist/transition machinery. A failed
 /// <see cref="TrySendChildStart"/> (an unregistered child workflow type — a permanent configuration
-/// error, not something redelivery could ever fix) is reported back rather than acted on here for the
-/// same reason: only the actor can drive the resulting <c>Transition.EndTransition</c> through
+/// error that no redelivery could ever fix) is reported back to the actor for the same reason: only
+/// the actor can drive the resulting <c>Transition.EndTransition</c> through
 /// <c>PersistEnvelopeThen</c>.
 /// </summary>
 internal sealed class ChildOrchestrator<TState>(WorkflowHandleRegistry registry)
@@ -111,7 +111,7 @@ internal sealed class ChildOrchestrator<TState>(WorkflowHandleRegistry registry)
     {
         // The child's own outcome decides how the parent sees it, which is what makes
         // CompletionPolicy.AllSuccessful mean what its name says: a child that failed reports Failed,
-        // not Completed-because-it-stopped-gracefully.
+        // exactly that, whatever grace it stopped with.
         var childStatus = outcome switch
         {
             WorkflowOutcome.Completed => ChildStatus.Completed,

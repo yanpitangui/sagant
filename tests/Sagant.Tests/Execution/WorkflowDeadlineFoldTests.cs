@@ -26,7 +26,7 @@ public class WorkflowDeadlineFoldTests
             RetryCount: 0, Status: WorkflowStatus.Running);
 
     /// <summary>
-    /// The invariant, checked after every event rather than only at the end — an index built by
+    /// The invariant, checked after every single event along the way — an index built by
     /// following the stream is correct only if it is correct at each point it observes.
     ///
     /// A live instance's armed set is exactly the two instants the state fold holds. A terminal one

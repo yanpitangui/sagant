@@ -14,12 +14,14 @@ namespace Sagant.Protocol;
 /// long-lived workflow instance would otherwise accumulate one permanently-stale entry per redeploy
 /// of the sending node, forever. Bounding this the same way as <see cref="Idempotency.IdempotencyLedger"/>
 /// closes that off: an evicted producer id is safe to forget outright — a producer that's gone never
-/// redelivers again under that identity, so eviction here never lets a genuine duplicate through,
-/// only forgets a producer that could no longer ask anyway.
-/// Unlike <see cref="Idempotency.IdempotencyLedger"/>, re-recording an existing producer id DOES move
-/// it to the freshest position: every message from a still-active producer touches its own entry, so
-/// true LRU (recency of use, not just first-seen order) is what keeps an actively-sending producer
-/// from being evicted out from under itself while genuinely-stale producers still age out.
+/// redelivers again under that identity, so eviction here never lets a genuine duplicate through; it
+/// only forgets a producer with nothing left to ask.
+/// Re-recording an existing producer id moves it to the freshest position: every message from a
+/// still-active producer touches its own entry, so what an entry's position tracks is when it was
+/// last used — true LRU — which is what keeps an actively-sending producer from being evicted while
+/// genuinely-stale producers still age out. (<see cref="Idempotency.IdempotencyLedger.Record"/> keeps
+/// a re-recorded key's original position — see that method's own doc comment for why the two ledgers
+/// differ there.)
 /// </summary>
 public sealed class SeqNrLedger
 {

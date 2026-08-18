@@ -42,7 +42,7 @@ public partial class RestartingWorkflow : Workflow<RestartingState>
     /// The instance's own view of how far it has cycled.
     ///
     /// A restart reclaims the events behind it, including the state change of the cycle it closed,
-    /// so state ends up held in the snapshot rather than in anything the journal still has. That is
+    /// so state ends up held entirely in the snapshot, with none of it left in the journal. That is
     /// the whole point of <c>E11</c> — and it means a reader that folds the journal cannot see it.
     /// Asking the instance is how a caller observes a restarting workflow's state.
     /// </summary>

@@ -4,7 +4,7 @@ namespace Sagant.Effects;
 /// The effect a query handler (a method marked <c>[WorkflowQuery]</c>) produces: a reply, and
 /// nothing else. There is no <see cref="PersistenceEffect{TState}"/> member and no
 /// <see cref="Transition"/> member, so a query cannot express a write at all — that is a
-/// compile-time property of this type, not a convention a handler is asked to respect.
+/// compile-time property of this type, enforced by the compiler on every handler.
 ///
 /// That constraint is what lets a runtime driver dispatch a query immediately, concurrently with a
 /// step that is still executing: whole-state persistence means two overlapping writers race over the

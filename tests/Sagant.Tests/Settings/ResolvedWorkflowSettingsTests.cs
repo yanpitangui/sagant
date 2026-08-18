@@ -5,8 +5,8 @@ namespace Sagant.Tests.Settings;
 
 /// <summary>
 /// Override layering is guarantee E6's other half: "step-specific value, else default" has to mean
-/// the same thing to every driver, so it is decided here once rather than re-derived at each
-/// resolution site.
+/// the same thing to every driver, so it is decided here, once, and every resolution site reads
+/// that single answer.
 /// </summary>
 public class ResolvedWorkflowSettingsTests
 {
@@ -41,7 +41,7 @@ public class ResolvedWorkflowSettingsTests
     }
 
     /// <summary>A step registering only a recover strategy must still fall through to the default
-    /// timeout — the two overrides layer independently, not as one all-or-nothing entry.</summary>
+    /// timeout — the two overrides layer independently, each one its own optional entry.</summary>
     [Fact]
     public void StepTimeoutFor_StepWithOnlyARecoverStrategyOverride_StillUsesTheDefaultTimeout()
     {

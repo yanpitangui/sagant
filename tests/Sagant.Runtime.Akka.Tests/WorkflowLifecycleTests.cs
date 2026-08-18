@@ -52,7 +52,8 @@ public class WorkflowLifecycleTests : WorkflowActorTestKit
         actor.Tell(new Suspend(), TestActor);
         ExpectMsg<Sagant.Protocol.Done>();
 
-        // The step's result arrives after suspend — must be discarded (stale epoch), not applied.
+        // The step's result arrives after suspend — must be discarded outright, via the stale epoch,
+        // never applied.
         neverCompletes.SetResult(new StepEffectsBuilder<TestState>().UpdateState(new TestState { Value = "should-not-apply" }).ThenComplete());
 
         actor.Tell(new GetDiagnostics<TestState>(), TestActor);

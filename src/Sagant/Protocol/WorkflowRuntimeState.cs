@@ -4,7 +4,7 @@ using Sagant.Idempotency;
 
 /// <summary>
 /// Coarse-grained lifecycle status of a workflow instance. How a finished run *ended* is
-/// <see cref="WorkflowOutcome"/>'s job, not this enum's.
+/// <see cref="WorkflowOutcome"/>'s job alone; this enum stops at "it's over."
 /// </summary>
 public enum WorkflowStatus
 {
@@ -13,8 +13,9 @@ public enum WorkflowStatus
     /// this, so a caller can tell an absent run from a live one.
     ///
     /// This is the zero value deliberately: a status that arrives as <c>default</c> — an unset field, a
-    /// value type that was never assigned, an id whose history is gone — says the run is absent, which
-    /// is the answer that keeps a caller waiting on it rather than one that keeps waiting forever.
+    /// value type that was never assigned, an id whose history is gone — reports the run as absent, a
+    /// definitive answer a caller can act on immediately, distinct from every in-progress status the
+    /// enum defines.
     /// </summary>
     NotStarted = 0,
 
@@ -110,8 +111,8 @@ public sealed record WorkflowRuntimeState<TState>(
     SeqNrLedger? HighestAppliedSeqNr = null,
     /// <summary>
     /// Closes the ambiguous-<c>Ask</c>-timeout caller-retry case: a caller-supplied idempotency key
-    /// on a repeat send replays the cached <see cref="Idempotency.IdempotencyLedger"/> reply instead
-    /// of re-invoking the command handler. <c>null</c> until the first key-bearing command this
+    /// on a repeat send replays the cached <see cref="Idempotency.IdempotencyLedger"/> reply, with
+    /// the command handler left uninvoked. <c>null</c> until the first key-bearing command this
     /// instance ever handles — constructed lazily (see <c>WorkflowEntityActor</c>) since most
     /// workflow instances never use idempotency keys at all.
     /// </summary>

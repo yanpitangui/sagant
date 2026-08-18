@@ -54,8 +54,8 @@ internal sealed class WorkflowEventLoggerActor : ReceiveActor
         {
             // This read model is about orders, and every row it writes hangs off a workflow_views row
             // OrderPlacementService created before the run began. A workflow that never went through
-            // that path — a schedule, say — has no such row, so its events belong to whatever reads
-            // its own history rather than to this one.
+            // that path — a schedule, say — has no such row, so its events belong entirely to
+            // whatever reads its own history.
             if (item.WorkflowType is not (nameof(OrderFulfillmentWorkflow) or nameof(ItemFulfillmentWorkflow)))
             {
                 return;
@@ -65,9 +65,9 @@ internal sealed class WorkflowEventLoggerActor : ReceiveActor
             var at = item.Timestamp;
 
             // An order this replica did not place — one a schedule started — has none of the rows the
-            // writes below hang off, so it is registered on first sight. Once per id per replica,
-            // since a schedule places one every couple of minutes and this is a read model, not a
-            // hot path.
+            // writes below hang off, so it is registered on first sight. Once per id per replica is
+            // plenty, since a schedule places one every couple of minutes and this read model is far
+            // from a hot path.
             if (registered.Add(id))
             {
                 if (item.WorkflowType == nameof(OrderFulfillmentWorkflow))

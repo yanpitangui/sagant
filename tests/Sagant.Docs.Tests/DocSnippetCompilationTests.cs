@@ -76,7 +76,7 @@ public class DocSnippetCompilationTests
         Assert.Contains("README.md", filesWithSnippets);
     }
 
-    /// <summary>Skipping is deliberate, so the reasons stay visible rather than accumulating quietly.</summary>
+    /// <summary>Skipping is deliberate, so the reasons stay visible, out in the open where they can be counted.</summary>
     [Fact]
     public void SkippedSnippetsStayRare()
     {

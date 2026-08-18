@@ -7,9 +7,9 @@ namespace Sagant.Runtime.Akka.Tests;
 
 /// <summary>
 /// The ticker that pokes each slice as it arrives. Its one durable fact is the last bucket it
-/// reached, and that fact is what makes a gap recoverable — a process down for an hour walks the
-/// hour it missed rather than skipping to the present, so the deadlines inside those slices fire
-/// late instead of never.
+/// reached, and that fact is what makes a gap recoverable — a process down for an hour walks every
+/// slice across that hour on its way back to the present, so the deadlines inside those slices still
+/// fire, late but not lost.
 /// </summary>
 public class DeadlineTickerActorTests : TestKit
 {
@@ -62,7 +62,7 @@ public class DeadlineTickerActorTests : TestKit
     }
 
     /// <summary>
-    /// The gap is walked, not skipped. A ticker that jumped straight to the present would leave every
+    /// The gap is walked in full. A ticker that jumped straight to the present would leave every
     /// slice it missed unpoked, and every deadline inside them would fire only when something else
     /// happened to activate its instance.
     /// </summary>
@@ -112,7 +112,7 @@ public class DeadlineTickerActorTests : TestKit
         clock.Set(Noon.AddHours(1));
         Sys.ActorOf(DeadlineTickerActor.Props(settings, buckets.Ref, clock));
 
-        // One pass takes three, oldest first, rather than the whole hour at once.
+        // One pass takes three, oldest first — the whole hour's worth waits for the next.
         var poked = PokedBuckets(buckets, 3, TimeSpan.FromSeconds(10));
         Assert.Equal(
             new[] { 1, 2, 3 }.Select(m => DeadlineBucket.For(Noon.AddMinutes(m))),

@@ -7,11 +7,11 @@ namespace Sagant.Protocol;
 /// Two ways a wait ends, so this is a closed hierarchy a caller switches over exhaustively. A run
 /// that <see cref="Finished"/> is over. A run that <see cref="Parked"/> is alive and holding, and
 /// resumes only once someone acts on the failure it carries — waiting longer would achieve nothing,
-/// which is why it comes back rather than blocking to a timeout.
+/// so this comes back the moment that becomes true, without holding the caller to a timeout.
 ///
-/// A failed run comes back as a value rather than an exception, because a workflow that could not
-/// charge an order is an ordinary business result the caller decides about, never an exceptional
-/// condition in the caller's own control flow.
+/// A failed run comes back as a value: a workflow that could not charge an order is an ordinary
+/// business result the caller decides about, never an exceptional condition in the caller's own
+/// control flow.
 /// </summary>
 public abstract record WorkflowResult<TState>
 {

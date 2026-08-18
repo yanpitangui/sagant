@@ -84,7 +84,7 @@ public static class WorkflowDeadlineRegistrationExtensions
             messageExtractor: new BucketMessageExtractor());
 
         // One ticker for the cluster, poking each bucket as its slice arrives. It holds the last
-        // bucket it reached, which is what lets a gap be walked rather than skipped.
+        // bucket it reached, which is what lets it walk every bucket across a gap on its way back.
         system.ActorOf(
             ClusterSingletonManager.Props(
                 DeadlineTickerActor.Props(settings, region, TimeProvider.System),

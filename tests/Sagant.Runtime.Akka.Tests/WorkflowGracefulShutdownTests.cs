@@ -86,9 +86,9 @@ public class WorkflowGracefulShutdownTests : WorkflowActorTestKit
         ExpectMsg<string>();
 
         actor.Tell(new GracefulShutdown(), TestActor);
-        // Force a mailbox round-trip before advancing virtual time: Tell is fire-and-forget, so
-        // without this, Advance can race ahead of the actor actually processing GracefulShutdown
-        // and arming the grace timer.
+        // Force a mailbox round-trip before advancing virtual time: Tell is fire-and-forget, and
+        // Advance can otherwise race ahead of the actor actually processing GracefulShutdown and
+        // arming the grace timer.
         actor.Tell(new GetStatus(), TestActor);
         ExpectMsg<WorkflowStatusReply>();
 

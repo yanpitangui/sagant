@@ -22,8 +22,7 @@ public interface IScheduleSpec
 }
 
 /// <summary>Fires at a fixed spacing — "every fifteen minutes", counted from the previous
-/// occurrence rather than from when it actually ran, so a slow fire does not push the schedule
-/// later.</summary>
+/// occurrence's own scheduled time, so a slow fire does not push the schedule later.</summary>
 public sealed record EverySpec : IScheduleSpec
 {
     public EverySpec(TimeSpan interval)
@@ -97,7 +96,7 @@ public sealed record CronSpec : IScheduleSpec
         _expression.GetNextOccurrence(previous, Zone, inclusive: false);
 }
 
-/// <summary>Fires once, at a fixed instant — a delayed start rather than a recurrence.</summary>
+/// <summary>Fires once, at a fixed instant: a delayed start, with no recurrence after it.</summary>
 public sealed record OnceAtSpec(DateTimeOffset At) : IScheduleSpec
 {
     public DateTimeOffset? NextAfter(DateTimeOffset previous) => At > previous ? At : null;

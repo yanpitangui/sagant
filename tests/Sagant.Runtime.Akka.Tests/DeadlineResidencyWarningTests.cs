@@ -9,10 +9,10 @@ namespace Sagant.Runtime.Akka.Tests;
 /// The warning an instance gives when it is about to wait longer than it will stay resident and
 /// nothing is watching its deadline for it.
 ///
-/// Both conditions have to hold for lateness to be possible, so the check sits at the moment of
-/// arming rather than at registration — which also sidesteps the order a host's builder calls happen
-/// in. What it costs to get wrong is silence: a deployment accepting lateness would have nothing
-/// telling it so.
+/// Both conditions have to hold for lateness to be possible, and both are settled by the moment of
+/// arming, which is why the check sits there — that also sidesteps the order a host's builder calls
+/// happen in. What it costs to get wrong is silence: a deployment accepting lateness would have
+/// nothing telling it so.
 /// </summary>
 public class DeadlineResidencyWarningTests : WorkflowActorTestKit
 {

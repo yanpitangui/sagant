@@ -88,7 +88,7 @@ public class WorkflowProducerAdapterTests : TestKit
         Assert.Equal(Done.Instance, await ackTask1);
         sendNextToProbe.ExpectNoMsg(TimeSpan.FromMilliseconds(200));
 
-        // Enqueue a 4th item while demand is exhausted — it must queue behind wf-2/wf-3, not jump ahead.
+        // Enqueue a 4th item while demand is exhausted — it must queue behind wf-2/wf-3, in order.
         var ackTask4 = adapter.Ask<Done>(new WorkflowProducerAdapter.Enqueue("wf-4", envelope4), TimeSpan.FromSeconds(5));
 
         // Second RequestNext drains exactly wf-2.

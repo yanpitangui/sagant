@@ -6,7 +6,7 @@ namespace Sagant.Runtime.Akka.Tests;
 
 /// <summary>
 /// The parent's <c>[WorkflowChildResult]</c> handler: what a parent can do as each of its children
-/// settles, rather than only once the whole group resolves.
+/// settles, ahead of the whole group resolving.
 /// </summary>
 public class ChildResultHandlerTests : WorkflowActorTestKit
 {

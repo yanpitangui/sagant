@@ -12,8 +12,8 @@ public sealed record EchoState(string Value)
     public static EchoState Empty() => new("initial");
 }
 
-// Top-level, not nested: the source generator only handles top-level partial classes today —
-// nested-type support is a known gap, not exercised or fixed here. Sagant.Runtime.Akka.Tests'
+// Top-level: the source generator only handles top-level partial classes today. Nested-type
+// support is a known gap, left alone here. Sagant.Runtime.Akka.Tests'
 // WorkflowClientTests has its own identically-shaped copy, deliberately — a real ClusterSharding
 // round-trip needs a [WorkflowStep] class the generator actually runs against IN that project;
 // test projects don't share generated code with each other.

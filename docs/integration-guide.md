@@ -14,8 +14,8 @@ never a separate analyzer package.
 
 `WithWorkflow<TWorkflow, TState>` registers one workflow type on `ClusterSharding`, via
 `Akka.Hosting`'s fluent `AkkaConfigurationBuilder`. Use the `(builder, IServiceProvider)` overload
-of `AddAkka`, not the plain `Action<AkkaConfigurationBuilder>` one, whenever the workflow factory
-needs to resolve its own dependencies from DI:
+of `AddAkka` whenever the workflow factory needs to resolve its own dependencies from DI — the
+plain `Action<AkkaConfigurationBuilder>` overload has no `IServiceProvider` to give it:
 
 ```csharp scaffold=statements
 services.AddSingleton<IPaymentService, RealPaymentService>();
@@ -58,8 +58,8 @@ builder
     .WithWorkflow<EchoWorkflow, EchoState>(() => new EchoWorkflow());
 ```
 
-An in-memory journal loses all persisted state on process exit — fine for a test or a demo, not for
-anything meant to survive a restart.
+An in-memory journal loses all persisted state on process exit — fine for a test or a demo, and
+nothing more; anything meant to survive a restart needs a real one.
 
 ## Driving a workflow
 
@@ -78,7 +78,7 @@ public sealed class OrderPlacementService(IWorkflowClient client)
 `IWorkflowHandle<TWorkflow>` also exposes `Send` (fire-and-forget) and `RunAndAwaitResult` (wait for
 the workflow to reach a terminal status and return its final state, typed). Pass an `idempotencyKey`
 to `Send`/`Request`/`RunAndAwaitResult` for a caller-driven retry after an ambiguous outcome to
-replay the cached reply instead of re-invoking the handler — see
+replay the cached reply, with the handler left uninvoked — see
 [akka-runtime.md](akka-runtime.md#akkadelivery-and-idempotency).
 
 ## Deployment-level tuning
@@ -128,6 +128,6 @@ cascades and pause-for-approval should be built:
   per-request rendering, no per-connection server state, so Aspire's ordinary round-robin proxy
   works with no session affinity needed).
 - `OrderFulfillment.Tests` — integration tests against the real `IWorkflowClient`/`ClusterSharding`
-  path, not `WorkflowTestHarness`.
+  path itself, going past `WorkflowTestHarness`.
 
-Mirror it rather than reinventing patterns when building a new workflow-backed feature.
+Mirror it when building a new workflow-backed feature, letting it settle the pattern.

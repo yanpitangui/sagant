@@ -33,7 +33,7 @@ public class SharedJournalSmokeTests
     {
         var builder = Host.CreateApplicationBuilder();
 
-        // The options overload rather than the connection-string one: SqlJournalOptions owns
+        // The options overload, in place of the connection-string one: SqlJournalOptions owns
         // QueryPluginId and builds the read journal's own configuration from the same connection
         // settings. Configuring only the write journal leaves the query side without a database to
         // reach, and constructing it then fails on a timeout.
@@ -81,8 +81,8 @@ public class SharedJournalSmokeTests
 
             var feed = new JournalWorkflowEventFeed(readJournal, system.Materializer());
 
-            // No instance has run yet, so this reads an empty stream rather than failing — which is
-            // the point: the query path is wired, not merely constructed.
+            // No instance has run yet, so this reads an empty stream, cleanly, without failing —
+            // which is the point: the query path is genuinely wired up, well beyond merely constructed.
             var events = new List<WorkflowFeedItem>();
             await foreach (var item in feed.ReadEntity("nothing-here"))
             {

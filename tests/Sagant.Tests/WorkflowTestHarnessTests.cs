@@ -12,7 +12,7 @@ namespace Sagant.Tests;
 /// Akka.NET: this class doesn't derive from <c>Akka.TestKit.Xunit2.TestKit</c>, never touches
 /// <c>ActorSystem</c>/<c>IActorRef</c>/persistence, and every test runs synchronously fast.
 /// <see cref="CounterWorkflow"/>'s dispatcher tables are hand-written (same stand-in pattern as
-/// <see cref="WorkflowStepDispatcherTests"/>) rather than generator-produced — irrelevant to the
+/// <see cref="WorkflowStepDispatcherTests"/>), which is irrelevant to the
 /// harness, which only depends on <see cref="IWorkflowStepDispatcher{TState}"/>/
 /// <see cref="IWorkflowCommandDispatcher{TState}"/>, exactly what the generator emits for a real
 /// <c>[WorkflowStep]</c>/<c>[WorkflowCommandHandler]</c>-attributed workflow.
@@ -108,7 +108,8 @@ public class WorkflowTestHarnessTests
             throw new InvalidOperationException("boom");
 
         /// <summary>Throws on its first two invocations, succeeds on the third — for proving a
-        /// harness-driven retry actually re-invokes the step rather than just counting attempts.</summary>
+        /// harness-driven retry genuinely re-invokes the step — a counter alone could not prove
+        /// that.</summary>
         public Task<StepEffect<CounterState>> FlakyStep(StepContext<CounterState> ctx)
         {
             _flakyAttempts++;
@@ -204,7 +205,7 @@ public class WorkflowTestHarnessTests
         var harness = new WorkflowTestHarness<CounterWorkflow, CounterState>(new CounterWorkflow())
         {
             // Jump straight to Double, skipping Increment entirely — the point of State being
-            // settable, not just readable.
+            // writable from outside a running step.
             State = new CounterState(100),
         };
 

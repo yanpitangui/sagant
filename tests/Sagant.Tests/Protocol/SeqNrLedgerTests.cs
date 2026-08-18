@@ -36,14 +36,14 @@ public class SeqNrLedgerTests
     [Fact]
     public void Record_ExistingProducer_MovesItToFreshestPosition()
     {
-        // Unlike IdempotencyLedger, re-recording an existing key must bump its position — an
-        // actively-sending producer touches its own entry on every message, so eviction should track
-        // recency of use, not just first-seen order.
+        // Re-recording an existing key must bump its position — an actively-sending producer
+        // touches its own entry on every message, so eviction tracks recency of use. (IdempotencyLedger
+        // keeps a re-recorded key's original position instead — see that type's own doc comment.)
         var ledger = SeqNrLedger.Empty(capacity: 2)
             .Record("producer-1", 1)
             .Record("producer-2", 1)
             .Record("producer-1", 2) // producer-1 touched again — now freshest, producer-2 is oldest
-            .Record("producer-3", 1); // must evict producer-2, not producer-1
+            .Record("producer-3", 1); // must evict producer-2, the actually-oldest entry now
 
         Assert.True(ledger.TryGetHighest("producer-1", out var seqNr));
         Assert.Equal(2, seqNr);

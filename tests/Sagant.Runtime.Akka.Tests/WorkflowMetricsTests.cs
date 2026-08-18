@@ -16,10 +16,10 @@ namespace Sagant.Runtime.Akka.Tests;
 /// <c>Sagant.Tests.WorkflowDiagnosticsMetricsTests</c> for the harness/core-level equivalent) and
 /// the status-change instruments this actor calls explicitly. Mirrors <see cref="WorkflowTracingTests"/>'s
 /// <c>MeterListener</c>-flavored setup — but the <see cref="WorkflowDiagnostics.Meter"/> it listens
-/// on is process-global with no per-test session, and unlike spans (scoped via
-/// <c>workflow.persistence_id</c>, see <see cref="WorkflowTracingTests"/>) the metrics themselves
-/// deliberately carry no per-instance tag (see <see cref="WorkflowDiagnostics.RecordStatusChange"/>'s
-/// doc comment). Every test below passes a <c>workflowTypeName</c> unique to itself into
+/// on is process-global with no per-test session, and the metrics themselves deliberately carry no
+/// per-instance tag at all (see <see cref="WorkflowDiagnostics.RecordStatusChange"/>'s doc comment)
+/// — spans, by contrast, scope via <c>workflow.persistence_id</c> (see
+/// <see cref="WorkflowTracingTests"/>). Every test below passes a <c>workflowTypeName</c> unique to itself into
 /// <see cref="WorkflowActorTestKit.CreateActor"/> and filters on it, so a concurrently-running test
 /// elsewhere in this assembly recording the exact same instrument (e.g. another test's workflow
 /// also reaching <c>ThenEnd()</c>) can never be mistaken for this test's own measurement.

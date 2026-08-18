@@ -10,9 +10,9 @@ namespace Sagant.Runtime.Akka.Clustering;
 /// <c>ExtractorAdapter</c> (present since Akka.NET v1.5.15) intercepts and strips that outer
 /// envelope BEFORE ever calling into this class. So <see cref="EntityId"/> only ever needs to
 /// handle <see cref="WorkflowEnvelope"/>, and <see cref="EntityMessage"/>'s fallback branch
-/// receives the ALREADY-unwrapped inner payload
-/// (<c>ConsumerController.SequencedMessage&lt;WorkflowEnvelope&gt;</c> for Delivery traffic), not a
-/// raw <see cref="ShardingEnvelope"/>.
+/// receives the ALREADY-unwrapped inner payload — for Delivery traffic, a bare
+/// <c>ConsumerController.SequencedMessage&lt;WorkflowEnvelope&gt;</c>, with the outer
+/// <see cref="ShardingEnvelope"/> already gone.
 /// Extends <see cref="HashCodeMessageExtractor"/> (the official pattern — see
 /// https://getakka.net/articles/clustering/cluster-sharding.html), whose own <c>ShardId</c> uses a
 /// stable hash: the same input produces the same shard id across independent process runs, which

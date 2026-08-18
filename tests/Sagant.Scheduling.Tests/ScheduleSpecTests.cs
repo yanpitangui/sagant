@@ -22,7 +22,8 @@ public class ScheduleSpecTests
 
     /// <summary>
     /// A zero interval would answer with the instant it was given, so a schedule computing its next
-    /// occurrence would never move. Rejected where it is written rather than where it would spin.
+    /// occurrence would never move. Rejected right where it is written, before it ever gets the
+    /// chance to spin.
     /// </summary>
     [Theory]
     [InlineData(0)]
@@ -67,9 +68,9 @@ public class ScheduleSpecTests
             new DailyAtSpec(new TimeOnly(2, 30), TimeZoneInfo.Utc).NextAfter(Noon));
 
     /// <summary>
-    /// The case that makes a calendar spec worth a dependency rather than hand-rolling. In New York,
-    /// 2026-03-08 runs 01:59:59 straight to 03:00:00, so a 02:30 daily schedule has no 02:30 that
-    /// day — and the answer has to be a real instant, not a time that did not happen.
+    /// The case that makes a calendar spec worth a dependency, beyond what hand-rolling could cover.
+    /// In New York, 2026-03-08 runs 01:59:59 straight to 03:00:00, so a 02:30 daily schedule has no
+    /// 02:30 that day — and the answer has to be a real instant, one that genuinely happened.
     /// </summary>
     [Fact]
     public void DailyAtSpec_HandlesADayWhereThatTimeDoesNotExist()

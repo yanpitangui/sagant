@@ -15,7 +15,7 @@ namespace OrderFulfillment.Tests;
 /// <see cref="WorkflowClusterTestHarness{TWorkflow, TState}"/>) — not a bare actor. These exercise
 /// the workflow's own orchestration/compensation logic end-to-end through the same path production
 /// traffic takes, including a real <see cref="ItemFulfillmentWorkflow"/> child running as its own
-/// sharded entity, not a harness stand-in.
+/// sharded entity, standing in for nothing.
 ///
 /// Exception: <see cref="LargeOrder_PauseTimesOutWithoutApproval_AutoCancelsWithoutCharging"/>
 /// needs deterministic control over a timer, which requires swapping in a virtual-time
@@ -220,7 +220,7 @@ public class OrderFulfillmentWorkflowTests : Akka.TestKit.Xunit2.TestKit
         var final = await AwaitStatusAsync(workflow, OrderStatus.Cancelled, TimeSpan.FromSeconds(30));
         Assert.Equal(OrderStatus.Cancelled, final.Status);
 
-        // The unwind actually ran: the charge was refunded rather than left outstanding.
+        // The unwind actually ran: the charge was genuinely refunded, fully settled.
         Assert.NotEmpty(payment.Refunded);
     }
 
@@ -328,8 +328,8 @@ public class OrderFulfillmentWorkflowTests : Akka.TestKit.Xunit2.TestKit
         // Succeeds without throwing — a subsequent GetStatus against this same id isn't a reliable
         // way to observe "still deleted": any message to a purged id reactivates a brand-new,
         // EmptyState entity (ClusterSharding has no persistent "this id is gone forever" concept),
-        // exactly why the sample's own read model tombstones a deleted order in Postgres rather than
-        // ever querying the live entity again after a delete (see OrderReadModelRepository.SoftDeleteAsync).
+        // exactly why the sample's own read model tombstones a deleted order in Postgres, so it never
+        // has to query the live entity again after a delete (see OrderReadModelRepository.SoftDeleteAsync).
         await workflow.Delete(timeout: TimeSpan.FromSeconds(5));
 
         // The item itself already ended Completed (ChildStatus, per FulfillItemsStep's own doc

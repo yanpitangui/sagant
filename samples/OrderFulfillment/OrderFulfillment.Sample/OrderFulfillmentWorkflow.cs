@@ -42,8 +42,8 @@ public partial class OrderFulfillmentWorkflow : Workflow<OrderState>
         .Timeout(TimeSpan.FromMinutes(5), Steps.RefundPaymentStep)
         .DefaultStepTimeout(TimeSpan.FromSeconds(5))
         .StepRecovery(Steps.ChargePaymentStep, RecoverStrategy.WithMaxRetries(2).FailoverTo(Steps.RefundPaymentStep))
-        // An order asked to cancel unwinds through the same refund path its own failures take,
-        // rather than stopping where it stands and leaving the charge outstanding.
+        // An order asked to cancel unwinds through the same refund path its own failures take, so
+        // the charge never sits outstanding.
         .CancelVia(Steps.CancelOrderStep)
         .Build();
 
@@ -66,8 +66,8 @@ public partial class OrderFulfillmentWorkflow : Workflow<OrderState>
             FaultStep: cmd.FaultStep, FaultPermanent: cmd.FaultPermanent);
 
         // The full order total is known upfront, straight from the command — no step needs to run
-        // first to discover whether this order needs approval, unlike the per-item reservation work
-        // that follows. Pausing here, before anything is charged or reserved, keeps a paused order
+        // first to discover whether this order needs approval, where the per-item reservation work
+        // that follows genuinely does. Pausing here, before anything is charged or reserved, keeps a paused order
         // from holding any real-world resource while it waits on a human.
         if (amount > ApprovalThreshold)
         {
@@ -125,8 +125,8 @@ public partial class OrderFulfillmentWorkflow : Workflow<OrderState>
             ParentClosePolicy.Terminate));
 
         // AllSuccessful (the default) now means what it says, because a child that failed reports
-        // Failed. WaitForAll rather than fail-fast is a business choice: every item gets attempted,
-        // so a partial order can be reasoned about, instead of stopping at the first bad one.
+        // Failed. WaitForAll, chosen here over fail-fast, is a business choice: every item gets
+        // attempted, so a partial order can be reasoned about, going past the first bad one.
         return StepEffects.UpdateState(updated).AwaitChildren(
             children, options => options.AllSuccessful().WaitForAll().ResumeAt(Steps.AfterItemsFulfilledStep));
     }

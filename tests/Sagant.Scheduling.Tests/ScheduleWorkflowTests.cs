@@ -12,8 +12,8 @@ namespace Sagant.Scheduling.Tests;
 /// pause with a deadline, and the harness compares that deadline against the clock it was given, so
 /// everything here is settled by arithmetic.
 ///
-/// What is deliberately absent is "does a passivated schedule actually wake", which belongs to the
-/// runtime rather than to the schedule.
+/// What is deliberately absent is "does a passivated schedule actually wake" — a question entirely
+/// for the runtime driving it, outside anything the schedule's own logic decides.
 /// </summary>
 public class ScheduleWorkflowTests
 {
@@ -126,7 +126,8 @@ public class ScheduleWorkflowTests
 
     /// <summary>
     /// The id is the occurrence's own instant, so a fire that happens twice addresses the same
-    /// instance both times and the second is an ordinary duplicate command rather than a second run.
+    /// instance both times, and the second is handled as an ordinary duplicate command, never a
+    /// second run.
     /// </summary>
     [Fact]
     public async Task TheOccurrenceIdIsDerivedFromTheInstantItWasScheduledFor()
@@ -258,8 +259,8 @@ public class ScheduleWorkflowTests
         await harness.RunPauseTimeoutIfDue();
 
         Assert.Equal(2, client.Started.Count);
-        // Placing one resets the run, so a schedule that recovers can be held up again later rather
-        // than being left permanently unable to skip.
+        // Placing one resets the run, so a schedule that recovers can be held up again later,
+        // recovering the ability to skip, no matter how long it went unheld.
         Assert.Equal(0, harness.State.ConsecutiveOverlapSkips);
     }
 

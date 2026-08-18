@@ -19,7 +19,7 @@ Recovery therefore sees every fact of a transition or none of them; an instance 
 mid-history at a transition boundary.
 
 **D2 — Deadlines survive as absolute timestamps.**
-Step, workflow, pause and retry-backoff deadlines persist as absolute times, not remaining
+Step, workflow, pause and retry-backoff deadlines persist as absolute times, never as remaining
 durations. A crash or cluster rebalance resumes the *remaining* wait — it never restarts the clock
 and never silently drops the deadline. See D8 for what bounds lateness.
 
@@ -40,14 +40,14 @@ transition, so no crash can apply one without the other.
 terminal, so recovery can redeliver a termination whose send never left the process.
 
 **D7 — A child relationship is persisted before its first send.**
-Relationship state, not the delivery layer, is the source of truth for recovery: if the process died
-before the send, no delivery layer could have buffered a message it never received.
+Relationship state is the source of truth for recovery, standing above the delivery layer: if the
+process died before the send, no delivery layer could have buffered a message it never received.
 
 **D8 — A live timer belongs to a live instance.**
 A passivated instance has no running timer; its deadline is re-armed from the persisted absolute time
 when the instance next activates, firing immediately if already past. A deadline is therefore never
 *lost* (D2), but while an instance is passivated its lateness is bounded by whatever next activates
-it rather than by the deadline.
+it — the deadline itself plays no part in that bound.
 
 `WithWorkflow` leaves cluster sharding's 120-second idle passivation on, so an instance holds memory
 while it is doing something and releases it while it waits. `D8a` keeps work in progress resident;
@@ -76,8 +76,8 @@ timer, which is exact — step timeouts and retry backoff never reach the index.
 
 A scheduler is optional: a deployment whose deadlines all land inside the passivation window needs
 none. An instance arming one that outlasts its own residency while no scheduler is running logs a
-warning naming both, once per instance, so the lateness it is about to accept is stated rather than
-discovered.
+warning naming both, once per instance, so the lateness it is about to accept is stated up front
+up front, ahead of being discovered later.
 
 **D8a — Work in progress keeps its instance resident.**
 Cluster sharding measures idleness by the messages it routes to an entity, and an instance running a
@@ -107,7 +107,7 @@ leave state untouched.
 
 **C3 — A stale step result is discarded.**
 A result from an attempt the runtime has stopped waiting on — timed out, suspended, terminated — is
-dropped rather than applied.
+dropped outright, never applied.
 
 **C4 — Exactly one live instance per workflow id, cluster-wide.**
 Enforced by the sharding coordinator: a new region cannot activate an instance until the previous
@@ -128,8 +128,8 @@ Backoff delay is folded into the step deadline, so a backoff longer than the ste
 expire the attempt before it begins running.
 
 **E3 — The workflow timeout does not run while paused.**
-It bounds active processing time, not time spent waiting for a human. A paused instance is governed
-by its own pause timeout instead.
+It bounds active processing time alone. A paused instance is governed by its own pause timeout, on
+its own separate clock.
 
 **E4 — Resume restarts the step fresh.**
 Retry count resets and any in-flight backoff is discarded.
@@ -154,9 +154,9 @@ and query overrides layer over their defaults by the same rule in every driver.
 `WorkflowStatus.Finished` always carries a `WorkflowOutcome`: `Completed`, `Failed` (with a
 structured `WorkflowFailure` — message, exception type, stack trace, inner chain, step name, attempt
 count), `TimedOut`, or `Terminated`. A caller switches over a closed hierarchy; the compiler points
-out any case they forgot. `RunAndAwaitResult` returns that outcome alongside the final state rather
-than throwing, because a failed workflow is a business result, not an exceptional condition in the
-caller's control flow.
+out any case they forgot. `RunAndAwaitResult` returns that outcome alongside the final state as a
+value, because a failed workflow is a business result for the caller's own control flow to decide
+about, on its own terms.
 
 Only the workflow-level deadline produces `TimedOut`. A step timeout becomes a step failure and flows
 through the retry budget like any other, surfacing as `Failed` with `ExceptionType` of
@@ -187,15 +187,15 @@ and what a rejection says, are the same everywhere.
 so a run with no natural end stops accumulating events without limit. The instance keeps its id, its
 state (whatever the same effect's `UpdateState` wrote), and its deduplication ledgers, since a
 producer keeps counting sequence numbers across a restart. It loses its retry count, its workflow
-deadline — the next cycle establishes its own, so a perpetual run is bounded per cycle rather than
-overall — and any children it owns, which are closed under `ParentClosePolicy` exactly as a terminal
+deadline — the next cycle establishes its own, so a perpetual run is bounded per cycle, with no
+overall ceiling across cycles — and any children it owns, which are closed under `ParentClosePolicy` exactly as a terminal
 transition closes them.
 
 Reclamation is a consequence, never a precondition: the fresh cycle is durable before any history is
 released, so a crash in between replays the old events plus the restart and folds to the same
 envelope. Losing the reclamation costs disk and changes no state.
 
-**E12 — A step can hold its run instead of ending it.**
+**E12 — A step can hold its run in place of ending it.**
 `RecoverStrategy.WithMaxRetries(n).ThenPark()` holds the instance at the step whose budget ran out,
 in `Suspended`, with `ParkedFailure` saying what stopped it. The step and its input survive, so
 `Resume` re-runs that attempt with a fresh budget (`E4`) and clears the failure. A spent budget has
@@ -223,7 +223,7 @@ increment was persisted produces the same group id.
 A child's `ChildStatus` derives from how its run finished: `Completed` from `Completed`, `Failed`
 from `Failed` or `TimedOut`, `Terminated` from `Terminated`, `Cancelled` when it was deleted without
 ever finishing. So `CompletionPolicy.AllSuccessful` means what its name says, and a parent reads
-`ChildGroupResult.Outcome` rather than re-deriving success from each child's own state.
+`ChildGroupResult.Outcome` directly, with no need to re-derive success from each child's own state.
 
 **H5 — A child's report writes only that child.**
 Each report appends one event naming the single member it concerns, so a group of *n* children
@@ -241,7 +241,7 @@ workflow that fans out widely, trading replay depth for write volume.
 Taken at dispatch time, never a torn mid-transition state. It may be superseded while the handler
 runs, which is what a read wants and cannot matter, because a query cannot write.
 
-**Q2 — Every query is bounded by the workflow, not the caller.**
+**Q2 — Every query is bounded by the workflow itself.**
 A caller's request timeout ends the caller's wait and sends nothing to the instance. Query handlers
 carry a server-side timeout of their own, defaulting to
 `WorkflowSettings.BuiltInQueryTimeout`.
@@ -249,8 +249,9 @@ carry a server-side timeout of their own, defaulting to
 ## Observability
 
 **O1 — One trace per run.**
-Spans correlate through a persisted trace parent. Retry attempts are siblings of each other, not a
-chain. A crash produces a link into a fresh trace rather than a false continuation of the old one.
+Spans correlate through a persisted trace parent. Retry attempts are siblings of each other, standing
+apart from any chain. A crash produces a link into a fresh trace, genuinely fresh, never a false
+continuation of the old one.
 
 **O2 — Reads do not advance the trace chain.**
 A query, or a command whose effect neither persists nor transitions, never becomes the parent of the
@@ -317,7 +318,8 @@ and cannot make it exactly-once: the side effect is outside the transaction that
 idempotency key at the downstream service, or make the operation naturally idempotent.
 
 Commands have a dedup mechanism for caller retries (`idempotencyKey`); steps deliberately do not,
-because the duplicate there originates from recovery, not from a caller.
+because the duplicate there originates from recovery — the engine's own concern, distinct from a
+caller's retry.
 
 **R2 — Guard commands against invalid states.**
 The runtime routes a command by type and never inspects state first. Deciding which states a command
@@ -333,7 +335,7 @@ its journal has never seen. Diagnostics `SAG002`/`SAG003` flag the shapes that a
 ## Deliberate non-guarantees
 
 **No deterministic replay, and none needed.**
-Sagant persists each step's effect rather than replaying handler code. There are no determinism
+Sagant persists each step's effect and stops there — it never replays handler code. There are no determinism
 constraints on handler bodies: no banned APIs, no version-gating, no replay-safe random or clock.
 This is a deliberate trade against Temporal's and Durable Task Framework's model — Sagant gives up
 their fine-grained recovery inside a single handler and gets ordinary, unconstrained C# in return.
@@ -355,7 +357,7 @@ addressable only by an id you already hold.
 - **Timer lateness when passivation is re-enabled (D8).** Off by default, so this only bites a
   deployment that turns it back on — and it is all that turning it back on costs, since work in
   progress holds its instance resident (D8a).
-- **A dropped step stalls its instances (E5).** They are held rather than ended, and each one needs
+- **A dropped step stalls its instances (E5).** They are held in place, kept alive, and each one needs
   the step deployed again plus a `Resume` before it moves. Nothing self-heals: the operator does both.
 - **Unbounded journal growth.** A workflow that loops indefinitely keeps appending events, and
   nothing resets that history. Snapshots bound how much of it recovery has to replay; they do not

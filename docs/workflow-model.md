@@ -76,7 +76,7 @@ by application code:
   that honors the token unwinds promptly; one that doesn't just runs to completion with its result
   discarded.
 
-## Effects, not direct mutation
+## Effects, applied by the driver
 
 Handlers never mutate state or drive a transition directly — they return an **effect**, a plain
 data value describing what should happen, and the runtime driver applies it. This is what makes
@@ -163,8 +163,8 @@ adds a deadline: once it passes, the workflow auto-transitions into the configur
 auto-cancel).
 
 A paused workflow doesn't count against `WorkflowSettings.WorkflowTimeout` — that ceiling applies
-to active processing time, not to time spent waiting on a human. `PauseSettings.Timeout` is the
-knob that governs a stuck approval instead.
+to active processing time alone. `PauseSettings.Timeout` is the knob that governs a stuck approval,
+on its own separate clock.
 
 ## Observability
 

@@ -6,9 +6,9 @@ namespace Sagant.Protocol;
 /// <summary>
 /// The <see cref="System.Diagnostics.ActivitySource"/> every <see cref="WorkflowEntityActor{TWorkflow, TState}"/>
 /// emits spans on — one per command handled, one per step execution (retries produce one span
-/// per attempt, so a flaky step's retry history is directly visible in a trace waterfall, not
-/// just in logs). No OpenTelemetry package dependency: this is the runtime-native primitive the
-/// OTel .NET SDK itself is built on. Wire it into your own OTel setup via
+/// per attempt, so a flaky step's retry history is directly visible in a trace waterfall, standing
+/// on its own next to whatever logs exist). No OpenTelemetry package dependency: this is the
+/// runtime-native primitive the OTel .NET SDK itself is built on. Wire it into your own OTel setup via
 /// <c>.AddSource("Sagant")</c>.
 ///
 /// Also the single owner of every metric instrument the framework emits (<see cref="Meter"/>) —

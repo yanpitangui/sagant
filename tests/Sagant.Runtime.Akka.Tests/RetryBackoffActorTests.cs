@@ -9,8 +9,8 @@ namespace Sagant.Runtime.Akka.Tests;
 
 /// <summary>
 /// The engine-level wiring for <see cref="RecoverStrategy.BackoffForAttempt"/> — does the actor
-/// actually wait, and does a crash/rebalance mid-wait resume the *remaining* delay rather than
-/// losing it or retrying immediately. This is the part <see cref="RetryBackoffTests"/> can't cover
+/// actually wait, and does a crash/rebalance mid-wait resume exactly the *remaining* delay, with no
+/// loss and no immediate retry. This is the part <see cref="RetryBackoffTests"/> can't cover
 /// (that file is pure functions, no Akka) — same split as engine timeouts already have between
 /// this style of test and plain unit tests. Uses <see cref="TestScheduler"/> so waiting is
 /// deterministic, never a real delay.
@@ -31,8 +31,8 @@ public class RetryBackoffActorTests : WorkflowActorTestKit
     private TestScheduler Scheduler => (TestScheduler)Sys.Scheduler;
 
     /// <summary>Sent by the "FlakyStep" delegate in every test below, every time it runs — the
-    /// observability channel for "did the step get invoked (again)", instead of a shared counter
-    /// the test would otherwise have to read across threads. Delivered through <c>TestActor</c>'s
+    /// observability channel for "did the step get invoked (again)", so the test needs no shared
+    /// counter of its own to read across threads. Delivered through <c>TestActor</c>'s
     /// own mailbox, so <c>ExpectMsg</c>/<c>ExpectNoMsg</c> below get proper cross-thread visibility
     /// for free via Akka's own message-passing guarantees — no <c>Interlocked</c>/<c>Volatile</c>
     /// needed anywhere in this file.</summary>
@@ -40,17 +40,18 @@ public class RetryBackoffActorTests : WorkflowActorTestKit
 
     /// <summary>
     /// Blocks until the actor has actually *scheduled* the backoff retry (persisted
-    /// <c>RetryDelayUntil</c>), not just until the step has run. <c>HandleStepFailed</c> — which
-    /// reads "now" to compute the backoff deadline — runs on a *later*, separate actor mailbox turn
-    /// than the step itself (the failure reaches the actor via <c>PipeTo</c>, not inline). Calling
+    /// <c>RetryDelayUntil</c>) — the step having merely run is not enough. <c>HandleStepFailed</c> —
+    /// which reads "now" to compute the backoff deadline — runs on a *later*, separate actor mailbox
+    /// turn than the step itself (the failure reaches the actor via <c>PipeTo</c>, an asynchronous
+    /// hop). Calling
     /// <see cref="TestScheduler.Advance"/> before that later turn has actually run races it:
     /// <c>HandleStepFailed</c> would read an already-advanced "now", silently inflating the deadline
     /// by however much virtual time the test advanced in the gap — reproduced and confirmed via
     /// reflection into <see cref="TestScheduler"/>'s internal queue (the scheduled fire time was
     /// consistently later than the persisted <c>RetryDelayUntil</c> by exactly however much the test
     /// had advanced in that window). Only manifests under scheduling jitter (parallel test load
-    /// widens the gap enough to lose the race); the fix is closing the gap, not giving it more
-    /// timeout budget to hide in.
+    /// widens the gap enough to lose the race); the fix closes the gap itself, leaving no timeout
+    /// budget for it to hide in.
     /// </summary>
     private Diagnostics<TestState> AwaitRetryScheduled(IActorRef actor)
     {
@@ -67,7 +68,7 @@ public class RetryBackoffActorTests : WorkflowActorTestKit
     [Fact]
     public void Backoff_DelaysRetry_DoesNotRetryBeforeTheDelayElapses()
     {
-        // Plain int, not Interlocked: mutated only inside the step delegate, which the actor model
+        // A plain int, mutated only inside the step delegate, which the actor model
         // guarantees runs one turn at a time on its own thread — never concurrently with itself.
         // The test never reads this directly; it observes StepAttempt messages instead (see above).
         var attempts = 0;
@@ -151,8 +152,9 @@ public class RetryBackoffActorTests : WorkflowActorTestKit
         // A fresh instance, same persistenceId — replays from the in-mem journal/snapshot.
         var recovered = CreateActor(persistenceId, script, settings);
 
-        // If this resumed instance retried immediately instead of resuming the remaining ~10-minute
-        // wait, a second StepAttempt would already be sitting in the mailbox here. Give recovery a
+        // A resumed instance correctly resumes the remaining ~10-minute wait. One that retried
+        // immediately instead would already have a second StepAttempt sitting in the mailbox here —
+        // give recovery a
         // moment to actually complete first — reaching Status.Running is safe to treat as
         // "OnRecoveryCompleted already ran and re-armed the live timer" (Akka.Persistence delivers
         // RecoveryCompleted before any other queued command, so a reply to GetDiagnostics can't

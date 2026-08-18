@@ -169,8 +169,8 @@ internal sealed class WorkflowRef<TWorkflow, TState>
     /// <summary>
     /// Sends <paramref name="command"/>, then waits for the workflow to reach a terminal status
     /// and returns its final state, going beyond a mere acknowledgement that the command was accepted.
-    /// Intended for workflows bounded in seconds/minutes; for anything that might pause for
-    /// hours/days, poll or subscribe instead of holding an <c>Ask</c> open that long. Takes
+    /// Intended for workflows bounded in seconds/minutes. For anything that might pause for
+    /// hours/days, prefer polling or subscribing over holding an <c>Ask</c> open that long. Takes
     /// `object` for the command parameter: this method is already generic over `TState`, and there's
     /// no single natural `TCommand` to add for a rarely-used method without an awkward third type
     /// parameter (Send/Ask above take a generic `TCommand` because they don't carry this constraint).

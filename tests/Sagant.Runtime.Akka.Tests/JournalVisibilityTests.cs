@@ -193,7 +193,7 @@ public class JournalVisibilityTests : WorkflowActorTestKit
             Assert.Equal("cycle-2", diagnostics.Envelope.UserState.Value);
 
             // Everything before the last restart is gone, so what remains describes the final cycle
-            // alone rather than all three.
+            // alone; the other two are gone with it.
             var remaining = new List<WorkflowEvent>();
             await foreach (var item in Feed.ReadEntity("VisibilityRestart"))
             {
@@ -205,7 +205,8 @@ public class JournalVisibilityTests : WorkflowActorTestKit
             // stops a perpetual workflow accumulating without bound.
             //
             // Whether that final batch has been released yet is a matter of when the journal gets to
-            // it, so this asserts the bound rather than an exact count.
+            // it, so this asserts the bound the count stays under, treating the exact value as
+            // unpredictable.
             Assert.True(
                 remaining.OfType<WorkflowEvent.RunRestarted>().Count() <= 1,
                 $"expected the earlier cycle's restart to be released, saw: {string.Join(", ", remaining.Select(e => e.GetType().Name))}");

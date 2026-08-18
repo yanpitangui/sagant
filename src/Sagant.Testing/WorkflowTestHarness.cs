@@ -18,7 +18,7 @@ internal interface IWorkflowTestHarnessChild
 /// Pure in-memory test harness for a workflow's command/step/query handlers — no
 /// <c>ActorSystem</c>, no persistence, no <c>ClusterSharding</c>.
 ///
-/// It is a driver, not an imitation of one. It holds the same
+/// It is a driver in its own right — it holds the same
 /// <see cref="WorkflowRuntimeState{TState}"/> a durable driver persists, plans every transition
 /// through the same <see cref="Execution.WorkflowTransitionPlanner"/>, and dispatches through the
 /// same generated <see cref="IWorkflowStepDispatcher{TState}"/>/
@@ -36,9 +36,9 @@ internal interface IWorkflowTestHarnessChild
 /// (step-specific override, else <see cref="WorkflowSettings.DefaultStepRecoverStrategy"/>), then
 /// fails over once the budget is exhausted. Retries run back-to-back with no simulated wait —
 /// <see cref="RecoverStrategy.BackoffForAttempt"/> is a pure <c>Func&lt;int, TimeSpan&gt;</c>,
-/// directly unit-testable on its own (see <c>RetryBackoffTests</c>) — so this harness exercises the
-/// *decision*, not the delay. A step with no <see cref="RecoverStrategy"/> configured lets the
-/// exception propagate straight to the caller.
+/// directly unit-testable on its own (see <c>RetryBackoffTests</c>) — so this harness exercises only
+/// the *decision*, leaving the delay itself to that unit test. A step with no
+/// <see cref="RecoverStrategy"/> configured lets the exception propagate straight to the caller.
 ///
 /// Takes a <see cref="TimeProvider"/> (defaulting to <see cref="TimeProvider.System"/>) as its clock
 /// abstraction — pass a <see cref="FakeTimeProvider"/> to control time in a test. Use
@@ -303,7 +303,7 @@ public sealed class WorkflowTestHarness<TWorkflow, TState>
     /// <see cref="WorkflowSettings.WorkflowRecoverStrategy"/> into its failover step, or — with no
     /// strategy configured — ends the workflow with reason <c>"workflow timeout"</c>. Deliberately a
     /// no-op while <see cref="WorkflowStatus.Paused"/>: the workflow-level timeout is a ceiling on
-    /// active processing time, not on time spent waiting for human input; a paused workflow's own
+    /// active processing time alone, and a paused workflow's own
     /// <see cref="PauseSettings.Timeout"/> — see <see cref="RunPauseTimeoutIfDue"/> — is what governs
     /// a stuck approval. Advance a <c>FakeTimeProvider</c> passed to the constructor, then call this.
     /// Returns <c>null</c> if the deadline hasn't passed, no <see cref="WorkflowSettings.WorkflowTimeout"/>

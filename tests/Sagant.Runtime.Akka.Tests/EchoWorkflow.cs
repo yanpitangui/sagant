@@ -10,8 +10,8 @@ public sealed record EchoState(string Value)
     public EchoState() : this("initial") { }
 }
 
-// Top-level, not nested: the source generator only handles top-level partial classes today —
-// nested-type support is a known gap, not exercised or fixed here. A separate, identically-shaped
+// Top-level: the source generator only handles top-level partial classes today. Nested-type
+// support is a known gap, left alone here. A separate, identically-shaped
 // copy from Sagant.Tests's EchoWorkflowGeneratorSanityTests.cs — that one exercises the generator's
 // dispatcher output directly with zero Akka.NET; this one is what WorkflowClientTests below drives
 // through a real ClusterSharding round-trip, which needs its own [WorkflowStep] class in THIS

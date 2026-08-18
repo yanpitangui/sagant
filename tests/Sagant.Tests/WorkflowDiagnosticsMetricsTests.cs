@@ -188,13 +188,14 @@ public class WorkflowDiagnosticsMetricsTests
             Task.FromResult(StepEffects.ThenComplete());
     }
 
-    // WorkflowDiagnostics.Meter is process-global with no per-test session, and — unlike a span,
-    // which every test can scope via a unique persistence id — these status-change metrics
-    // deliberately carry no per-instance tag (see WorkflowDiagnostics.RecordStatusChange's doc
-    // comment). PauseEndWorkflow's own type name is this file's disambiguator: it's declared only
-    // here, so no concurrently-running test elsewhere in this assembly (e.g. WorkflowTestHarnessTests'
-    // CounterWorkflow also reaching ThenEnd()) can be mistaken for these measurements — every
-    // assertion below filters on it explicitly rather than relying on Single() over the whole bag.
+    // WorkflowDiagnostics.Meter is process-global with no per-test session, and these status-change
+    // metrics deliberately carry no per-instance tag at all (see
+    // WorkflowDiagnostics.RecordStatusChange's doc comment) — a span, by contrast, every test can
+    // scope via a unique persistence id. PauseEndWorkflow's own type name is this file's
+    // disambiguator: it's declared only here, so no concurrently-running test elsewhere in this
+    // assembly (e.g. WorkflowTestHarnessTests' CounterWorkflow also reaching ThenEnd()) can be
+    // mistaken for these measurements — every assertion below filters on it explicitly, a stronger
+    // guard than Single() over the whole bag would give.
     private static IEnumerable<Measurement> For(ConcurrentBag<Measurement> measurements, string instrumentName) =>
         measurements.Where(m => m.InstrumentName == instrumentName && (string?)m.Tags["workflow.type"] == nameof(PauseEndWorkflow));
 

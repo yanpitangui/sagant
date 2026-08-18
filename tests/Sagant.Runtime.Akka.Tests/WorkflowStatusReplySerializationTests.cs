@@ -43,12 +43,12 @@ public class WorkflowStatusReplySerializationTests : TestKit
     }
 
     /// <summary>
-    /// Why the reply is a record rather than the enum on its own. A bare enum carries nothing on the
-    /// wire beyond the number behind it, so the asker gets an integer and an <c>Ask</c> typed to a
-    /// status throws instead of answering.
+    /// Why the reply is a record, carrying the enum as a value inside it. A bare enum carries nothing
+    /// on the wire beyond the number behind it, so the asker gets an integer, and an <c>Ask</c> typed
+    /// to a status throws on that mismatch, with no answer at all.
     ///
-    /// Asserted rather than described, so replacing the wrapper with the bare value fails here rather
-    /// than in whatever deployment first has two nodes.
+    /// Asserted directly here — replacing the wrapper with the bare value fails at this test, not
+    /// only in whatever deployment first has two nodes.
     /// </summary>
     [Fact]
     public void ABareStatus_DoesNotComeBackAsOne()

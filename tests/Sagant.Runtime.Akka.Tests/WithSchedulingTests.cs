@@ -14,7 +14,7 @@ namespace Sagant.Runtime.Akka.Tests;
 /// <c>WithScheduling</c> registers the schedule workflow so an application does not write that
 /// registration itself. What it has to get right is the client: a schedule resolves one to start the
 /// work it schedules, and resolving it while the <c>ActorSystem</c> is still being built would be
-/// circular — so this covers a schedule actually running rather than only the call compiling.
+/// circular — so this covers a schedule actually running, going beyond only the call compiling.
 /// </summary>
 public class WithSchedulingTests
 {

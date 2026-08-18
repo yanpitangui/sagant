@@ -39,8 +39,8 @@ public class WorkflowStepCancellationTests : WorkflowActorTestKit
         var cancelled = new TaskCompletionSource<bool>();
         Func<TestState, object?, CancellationToken, Task<StepEffect<TestState>>> handler = (_, _, ct) =>
             {
-                // Never completes on its own, but — unlike a step that ignores the token — actually
-                // resolves once cancelled, same as a real HttpClient/EF call would. Leaving this
+                // Never completes on its own, and resolves once cancelled — same as a real
+                // HttpClient/EF call would; a step that ignores the token stays hanging instead. Leaving this
                 // task permanently unresolved (as an earlier version of this helper did) orphans it
                 // for the rest of the test process, which was observed to interfere with unrelated
                 // later tests sharing the thread pool.
@@ -122,10 +122,10 @@ public class WorkflowStepCancellationTests : WorkflowActorTestKit
         ExpectMsg<string>();
 
         actor.Tell(new GracefulShutdown(), TestActor);
-        // Force a mailbox round-trip before advancing virtual time: Tell is fire-and-forget, so
-        // without this, Advance can race ahead of the actor actually processing GracefulShutdown
-        // and arming the grace timer — the timer would then get scheduled for a point in virtual
-        // time already in the past relative to the (already-advanced) clock, and never fire.
+        // Force a mailbox round-trip before advancing virtual time: Tell is fire-and-forget, and
+        // Advance can otherwise race ahead of the actor actually processing GracefulShutdown and
+        // arming the grace timer — a race that schedules the timer for a point in virtual time
+        // already in the past relative to the (already-advanced) clock, so it never fires.
         actor.Tell(new GetStatus(), TestActor);
         ExpectMsg<WorkflowStatusReply>();
 
@@ -141,7 +141,7 @@ public class WorkflowStepCancellationTests : WorkflowActorTestKit
     /// shortened by a caller-supplied value, never lengthened past that ceiling — see
     /// <see cref="WorkflowEntityActor{TWorkflow, TState}"/>'s constructor doc comment. An
     /// oversized request (999s) should still self-stop around the ~50s ceiling (60s default minus
-    /// 10s headroom), not wait anywhere near 999s.</summary>
+    /// 10s headroom), nowhere near the full 999s.</summary>
     [Fact]
     public void GracefulShutdown_RequestedGraceLargerThanHandoffCeiling_IsClampedToTheCeiling()
     {

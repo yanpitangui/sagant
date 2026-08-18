@@ -17,12 +17,11 @@ public interface IWorkflowHandle
     string EntityId { get; }
 
     /// <summary>
-    /// Fire-and-forget: delivers <paramref name="command"/> with no reply. <c>ValueTask</c> rather
-    /// than <c>void</c> or <c>Task</c> — a runtime backed by real I/O (e.g. a durable queue) needs
-    /// to actually await delivery, but the reference runtime completes this synchronously
-    /// (an in-memory send), so <c>ValueTask</c> avoids a <c>Task</c> allocation on what's
-    /// meant to be a hot path — see <see cref="Request{TCommand, TReply}"/> for the send-and-wait
-    /// counterpart.
+    /// Fire-and-forget: delivers <paramref name="command"/> with no reply. Returns <c>ValueTask</c>:
+    /// a runtime backed by real I/O (e.g. a durable queue) needs to actually await delivery, but the
+    /// reference runtime completes this synchronously (an in-memory send), so <c>ValueTask</c>
+    /// avoids a <c>Task</c> allocation on what's meant to be a hot path — see
+    /// <see cref="Request{TCommand, TReply}"/> for the send-and-wait counterpart.
     /// </summary>
     /// <param name="command">The command to deliver.</param>
     /// <param name="idempotencyKey">
@@ -33,8 +32,8 @@ public interface IWorkflowHandle
     /// command was actually delivered) to safely resend without risking a duplicate side effect.
     /// Backed by a capacity-bounded ledger per workflow instance — only the most recent
     /// <see cref="Sagant.Settings.WorkflowSettings.IdempotencyLedgerCapacity"/> keys are remembered,
-    /// oldest evicted first, so a key resent long after many other commands have gone through is no
-    /// longer deduplicated.
+    /// oldest evicted first, so a key resent long after many other commands have gone through has
+    /// already aged out of dedup by then.
     /// </param>
     /// <param name="cancellationToken">Cancels waiting for delivery to complete.</param>
     /// <param name="metadata">
@@ -63,7 +62,7 @@ public interface IWorkflowHandle
     /// duplicate side effect. Backed by a capacity-bounded ledger per workflow instance — only the
     /// most recent <see cref="Sagant.Settings.WorkflowSettings.IdempotencyLedgerCapacity"/> keys are
     /// remembered, oldest evicted first, so a key resent long after many other commands have gone
-    /// through is no longer deduplicated.
+    /// through has already aged out of dedup by then.
     /// </param>
     /// <param name="timeout">How long to wait for the reply before timing out.</param>
     /// <param name="cancellationToken">Cancels waiting for the reply.</param>
@@ -101,8 +100,8 @@ public interface IWorkflowHandle
 
     /// <summary>
     /// Asks the workflow to stop, letting it unwind first — see <see cref="Sagant.Protocol.Cancel"/>.
-    /// Returns once the decision is durable, not once compensation has finished; wait for the run's
-    /// completion if you need the latter.
+    /// Returns as soon as the decision is durable; the unwind itself keeps running afterward, so wait
+    /// for the run's completion to observe it finishing.
     ///
     /// Prefer this to <see cref="Terminate"/> for anything a workflow should get to clean up after.
     /// </summary>
@@ -150,9 +149,8 @@ public interface IWorkflowHandle
     /// along with its final state — going beyond a mere acknowledgement the command was accepted.
     ///
     /// A failed run comes back as a <see cref="WorkflowResult{TState}"/> carrying
-    /// <see cref="Sagant.Protocol.WorkflowOutcome.Failed"/>, not as a thrown exception: a workflow
-    /// that failed is a business result to decide about, not an exceptional condition in the caller's
-    /// own control flow.
+    /// <see cref="Sagant.Protocol.WorkflowOutcome.Failed"/>: a workflow that failed is a business
+    /// result for the caller's own code to decide about, on its own terms, in its own control flow.
     ///
     /// The explicit <typeparamref name="TState"/> here is the one place it can't be erased — it must
     /// match the workflow's actual state type, which is checked at runtime and throws immediately on
@@ -169,8 +167,8 @@ public interface IWorkflowHandle
     /// whether the command was actually delivered) to safely resend without risking a duplicate side
     /// effect. Backed by a capacity-bounded ledger per workflow instance — only the most recent
     /// <see cref="Sagant.Settings.WorkflowSettings.IdempotencyLedgerCapacity"/> keys are remembered,
-    /// oldest evicted first, so a key resent long after many other commands have gone through is no
-    /// longer deduplicated.
+    /// oldest evicted first, so a key resent long after many other commands have gone through has
+    /// already aged out of dedup by then.
     /// </param>
     /// <param name="cancellationToken">Cancels waiting for the workflow to complete.</param>
     Task<WorkflowResult<TState>> RunAndAwaitResult<TState>(object command, TimeSpan timeout, string? idempotencyKey = null, CancellationToken cancellationToken = default);

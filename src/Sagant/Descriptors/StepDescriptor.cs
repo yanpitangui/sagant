@@ -84,8 +84,8 @@ public readonly struct StepDescriptor<TState>
             configureActivity?.Invoke(activity);
         }
 
-        // A timestamp rather than a Stopwatch: every invocation goes through here, and reading the
-        // clock twice answers the same question the object would.
+        // Every invocation goes through here, so this reads the clock as a raw timestamp: reading it
+        // twice and comparing answers the duration question directly, with no object to allocate.
         var startedAt = Stopwatch.GetTimestamp();
         try
         {

@@ -108,8 +108,9 @@ public class WorkflowDeliveryHandlingTests : Support.WorkflowActorTestKit
         confirmProbe.ExpectMsg<ConsumerController.Confirmed>();
         replyToProbe.ExpectMsg<string>(r => r == "pong");
 
-        // A genuinely new seqNr (caller-code retry after an ambiguous Ask timeout — NOT a transport
-        // redelivery) carrying the same idempotency key must replay, not re-invoke.
+        // A genuinely new seqNr (caller-code retry after an ambiguous Ask timeout — a transport
+        // redelivery would already be caught above) carrying the same idempotency key must replay
+        // the cached reply, and must leave the handler uninvoked.
         var envelope2 = new WorkflowEnvelope("wf-5", new Ping("hi"), ReplyTo: replyToProbe.Ref, IdempotencyKey: "key-1");
         actor.Tell(new ConsumerController.Delivery<WorkflowEnvelope>(envelope2, confirmProbe.Ref, "producer-1", 2L));
         confirmProbe.ExpectMsg<ConsumerController.Confirmed>();
@@ -127,7 +128,7 @@ public class WorkflowDeliveryHandlingTests : Support.WorkflowActorTestKit
     /// this file uses plain <c>.Reply(...)</c>, which never transitions, so this is the only coverage
     /// of the transition branch specifically.
     ///
-    /// Asserts actual ORDERING, not just eventual delivery: a published <see cref="WorkflowFeedItem"/> carrying <see cref="WorkflowEvent.RunFinished"/>
+    /// Asserts actual ORDERING, going beyond eventual delivery alone: a published <see cref="WorkflowFeedItem"/> carrying <see cref="WorkflowEvent.RunFinished"/>
     /// is published from inside <c>PersistEnvelopeThen</c>'s <c>Persist</c> callback, strictly before
     /// <c>afterPersist</c> runs — so if it's subscribed on the SAME probe that's also the delivery's
     /// <c>ConfirmTo</c>, both messages are Tell'd by the very same single-threaded actor to the very
@@ -354,9 +355,10 @@ public class WorkflowDeliveryHandlingTests : Support.WorkflowActorTestKit
 
     /// <summary>
     /// A stashed command must stay stashed across an entire autonomous step-chain (StepA's own
-    /// effect transitions straight into StepB with no external input), not just past the first
-    /// step — see the design spec's "Rejected alternative: unstash between every transition" for
-    /// why unstashing mid-chain would be actively unsafe, not merely unnecessary.
+    /// effect transitions straight into StepB with no external input), past every step in it, all
+    /// the way to the end — see the design spec's "Rejected alternative: unstash between every
+    /// transition" for why unstashing mid-chain would be actively unsafe, well beyond merely
+    /// unnecessary.
     /// </summary>
     [Fact]
     public void Delivery_WhileStepChainInFlight_StaysStashedAcrossTheWholeChainNotJustTheFirstStep()
@@ -376,7 +378,7 @@ public class WorkflowDeliveryHandlingTests : Support.WorkflowActorTestKit
         confirmProbe.ExpectMsg<ConsumerController.Confirmed>();
 
         // StepA completes synchronously and chains straight into StepB, which then hangs. A command
-        // arriving any time after Start must wait out the whole chain, not just StepA.
+        // arriving any time after Start must wait out the whole chain, StepB included.
         actor.Tell(new ConsumerController.Delivery<WorkflowEnvelope>(
             new WorkflowEnvelope("wf-stash-4", new Ping("hi"), ReplyTo: replyToProbe.Ref), confirmProbe.Ref, "producer-1", 2L));
         replyToProbe.ExpectNoMsg(TimeSpan.FromMilliseconds(300));

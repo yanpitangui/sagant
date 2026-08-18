@@ -243,7 +243,7 @@ public static class WorkflowTransitionPlanner
     }
 
     /// <summary>
-    /// What an instance standing on a step its deployed code no longer registers does: guarantee E5.
+    /// What an instance standing on a step its deployed code has stopped registering does: guarantee E5.
     /// It is held at that step, keeping its state, the step name and that step's input, so deploying
     /// the step again and calling <c>IWorkflowHandle.Resume</c> continues the run from where it stood.
     ///

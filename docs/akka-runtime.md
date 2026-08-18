@@ -122,8 +122,8 @@ actor at all, with `Sender` preserved so `Ask`'s implicit reply-to still works.
 A step runs fire-and-`PipeTo` off-actor-thread, so the mailbox keeps draining while one is running.
 A business command arriving during that window is deferred (via the actor's inherited `Stash` —
 `ReceivePersistentActor`/`Eventsourced` already implements `IWithUnboundedStash`, no separate
-declaration needed) rather than dispatched against a state the step is about to supersede,
-and released once the step (or its whole autonomous chain) settles into something other than another
+declaration needed): dispatching it would run it against a state the step is about to supersede,
+and it is released once the step (or its whole autonomous chain) settles into something other than another
 step. The deferred delivery is never `Confirmed` while it waits, so a crash mid-defer just means the
 producer redelivers it once this entity — or its next incarnation, after a crash or `ClusterSharding`
 rebalance — comes back; no separate durability mechanism needed for the deferral itself.
@@ -167,9 +167,10 @@ types described in [child-workflows.md](child-workflows.md). Concretely:
 ## Tracing
 
 Every command and step execution is a span, correlated into one trace per workflow run via a
-persisted `LastTraceParent`. Retries within one workflow run are **siblings** in that trace, not a
-chain — a crash produces a **link into a new trace** on recovery, never a false continuation of the
-old one, and the same holds across a cross-node relocation from a `ClusterSharding` rebalance. See
+persisted `LastTraceParent`. Retries within one workflow run are **siblings** in that trace, each its
+own leaf — a crash produces a **link into a new trace** on recovery, standing apart from the trace
+that came before it, and the same holds across a cross-node relocation from a `ClusterSharding`
+rebalance. See
 `WorkflowEntityActor.ResolveParentContext`/`OnRecoveryCompleted`/`ConsumeRecoveredLink` for the
 exact mechanics — `WorkflowTracingTests` guards the recovery case specifically (a recovered span
 must link to a new trace, never pick up the old `TraceId` directly).

@@ -43,7 +43,7 @@ public sealed class OrderPlacementService(IWorkflowClient client, OrderReadModel
     /// is idempotent (an <c>UPDATE ... SET deleted_at = now()</c>, harmless to run twice) — but the
     /// caller here can't afford to wait on a separate actor's mailbox and pub-sub propagation before
     /// re-rendering the page the button was clicked on, the same reason <see cref="PlaceAsync"/>
-    /// writes its own read-model row synchronously instead of waiting on a notification too.</summary>
+    /// writes its own read-model row synchronously, on the spot, with no notification to wait on.</summary>
     public async Task DeleteAsync(string orderId, TimeSpan? timeout = null)
     {
         await client.For<OrderFulfillmentWorkflow>(orderId).Delete(timeout: timeout ?? TimeSpan.FromSeconds(10));

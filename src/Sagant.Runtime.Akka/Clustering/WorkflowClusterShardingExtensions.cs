@@ -96,9 +96,10 @@ public static class WorkflowClusterShardingExtensions
         var shardOptions = new ShardOptions
         {
             // Default hand-off-stop message: lets an in-flight step (fire-and-PipeTo, running
-            // off-actor-thread) finish and persist normally instead of being killed out from under
-            // it by the default PoisonPill — see GracefulShutdown's doc comment. Still overridable
-            // via configureShardOptions below for callers who want the plain PoisonPill back.
+            // off-actor-thread) finish and persist normally across a hand-off, where the default
+            // PoisonPill would kill it out from under itself — see GracefulShutdown's doc comment.
+            // Still overridable via configureShardOptions below for callers who want the plain
+            // PoisonPill back.
             HandOffStopMessage = new GracefulShutdown(),
 
             // Idle passivation on at ClusterSharding's own 120-second window, so an instance holds
@@ -161,8 +162,8 @@ public static class WorkflowClusterShardingExtensions
             new WorkflowMessageExtractor(numberOfShards),
             shardOptions);
 
-        // Akka.Hosting resolves shard regions asynchronously at host start, not synchronously here
-        // — defer populating the per-ActorSystem WorkflowHandleRegistry (see
+        // Akka.Hosting resolves shard regions asynchronously, at host start — this defers populating
+        // the per-ActorSystem WorkflowHandleRegistry (see
         // WorkflowClientRegistrationExtensions) until the region is actually resolvable via
         // ActorRegistry, mirroring the ActorRegistry.For(system).GetAsync<TWorkflow>() pattern used
         // elsewhere in this codebase (e.g. the OrderFulfillment sample/test harness). The producer

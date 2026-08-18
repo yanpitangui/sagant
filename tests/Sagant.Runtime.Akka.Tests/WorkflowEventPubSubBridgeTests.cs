@@ -74,9 +74,9 @@ public class WorkflowEventPubSubBridgeTests
             var probe = system.ActorOf(Props.Create(() => new ProbeActor(subscribed, received)));
 
             var mediator = DistributedPubSub.Get(system).Mediator;
-            // SubscribeAck is sent back to the Tell's Sender, not to the Subscribe message's own Ref
-            // — explicit sender needed here since this Tell comes from plain test code, not from
-            // inside an actor (where Self would be the implicit sender).
+            // SubscribeAck is sent back to the Tell's Sender — the Subscribe message's own Ref plays
+            // no part — so this needs an explicit sender: this Tell comes from plain test code,
+            // outside any actor, where Self would otherwise be the implicit sender.
             mediator.Tell(new Subscribe(WorkflowEventPubSubBridge.PubSubTopic, probe), probe);
             await subscribed.Task.WaitAsync(TimeSpan.FromSeconds(10));
 

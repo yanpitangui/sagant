@@ -16,9 +16,9 @@ namespace Sagant.Descriptors;
 /// <item>It <b>dispatches immediately</b>, including while a step is executing. A driver that defers
 /// commands until an in-flight step settles does so to keep two writers from racing over the whole
 /// state; a query is not a writer.</item>
-/// <item>It is <b>bounded by the runtime, not the caller</b>. A caller's request timeout completes
-/// the caller's own wait and sends nothing to the workflow instance, so a query carries a
-/// server-side timeout of its own — see <c>WorkflowSettings.DefaultQueryTimeout</c>.</item>
+/// <item>It is <b>bounded by the runtime</b>. A caller's request timeout completes the caller's own
+/// wait and sends nothing to the workflow instance, so a query carries its own server-side timeout —
+/// see <c>WorkflowSettings.DefaultQueryTimeout</c>.</item>
 /// </list>
 ///
 /// Reach for a query for anything a caller reads: a live status view, progress for a dashboard, a

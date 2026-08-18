@@ -47,12 +47,12 @@ public class WorkflowRefTests : TestKit
         }
     }
 
-    // A minimal stand-in for WorkflowProducerAdapter's private ReplyWaiterActor: since
-    // producerAdapterProbe below is a plain TestProbe rather than a real WorkflowProducerAdapter, it
-    // can't spawn the real thing itself when asked for a WorkflowProducerAdapter.CreateReplyWaiter --
-    // this reproduces just enough of its behavior (relay the first Tell/Status.Failure to the
-    // callbacks the message carried, then stop) so these tests exercise WorkflowRef's actual
-    // two-round-trip protocol (create waiter, then enqueue) rather than short-circuiting it.
+    // A minimal stand-in for WorkflowProducerAdapter's private ReplyWaiterActor: producerAdapterProbe
+    // below is a plain TestProbe, with no real WorkflowProducerAdapter behind it able to spawn the
+    // real thing when asked for a WorkflowProducerAdapter.CreateReplyWaiter — this reproduces just
+    // enough of its behavior (relay the first Tell/Status.Failure to the callbacks the message
+    // carried, then stop) so these tests exercise WorkflowRef's actual two-round-trip protocol
+    // (create waiter, then enqueue) in full, with no shortcut around it.
     private sealed class TestReplyWaiterActor : ReceiveActor
     {
         public TestReplyWaiterActor(Action<object?> onReply, Action<Exception> onFailure)
@@ -74,8 +74,8 @@ public class WorkflowRefTests : TestKit
     }
 
     // Answers the CreateReplyWaiter ask that WorkflowRef.Ask now issues before enqueueing, using a
-    // real TestReplyWaiterActor rather than a bare TestProbe ref -- Tell'ing a bare probe ref
-    // wouldn't invoke the CreateReplyWaiter message's OnReply/OnFailure callbacks the way the real
+    // real TestReplyWaiterActor: Tell'ing a bare TestProbe ref instead wouldn't invoke the
+    // CreateReplyWaiter message's OnReply/OnFailure callbacks the way the real
     // WorkflowProducerAdapter-spawned waiter does, and it's exactly those callbacks that resolve
     // WorkflowRef.Ask's returned Task.
     private IActorRef AnswerCreateReplyWaiter(global::Akka.TestKit.TestProbe producerAdapterProbe)
@@ -134,7 +134,8 @@ public class WorkflowRefTests : TestKit
         Assert.Equal(waiterRef, enqueue.Envelope.ReplyTo);
         producerAdapterProbe.LastSender.Tell(Done.Instance, producerAdapterProbe.Ref); // adapter acks the enqueue
 
-        // The business reply comes from whoever the entity was told to ReplyTo, not from the adapter.
+        // The business reply comes from whoever the entity was told to ReplyTo — the adapter's own
+        // part ends at the enqueue ack above.
         enqueue.Envelope.ReplyTo!.Tell("reply-value");
 
         Assert.Equal("reply-value", await askTask);
@@ -171,8 +172,8 @@ public class WorkflowRefTests : TestKit
         // (command, idempotencyKey, timeout, cancellationToken) differs textually from Ask's
         // (also (command, idempotencyKey, timeout, cancellationToken) since the item-2 reorder, but
         // WorkflowClient.Request's call into _inner.Ask is what this actually exercises), so this
-        // catches a regression at the handle boundary app code actually calls through, not just at
-        // WorkflowRef directly.
+        // catches a regression at the handle boundary app code actually calls through, going beyond
+        // WorkflowRef alone.
         var shardRegionProbe = CreateTestProbe();
         var producerAdapterProbe = CreateTestProbe();
         var workflowRef = new WorkflowRef<StubWorkflow, string>(shardRegionProbe.Ref, producerAdapterProbe.Ref, "order-42");

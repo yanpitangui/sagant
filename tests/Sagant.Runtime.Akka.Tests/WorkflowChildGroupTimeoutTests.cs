@@ -166,8 +166,8 @@ public class WorkflowChildGroupTimeoutTests : WorkflowActorTestKit
     }
 
     /// <summary>
-    /// A group's key carries its id, so a wake for one names that one. Asserted on the fold rather
-    /// than the actor, since it is the key an outside scheduler stores.
+    /// A group's key carries its id, so a wake for one names that one. Asserted directly on the
+    /// fold, since it is the key an outside scheduler stores.
     /// </summary>
     [Fact]
     public void TwoGroupsAwaitedAtOnce_EachArmUnderItsOwnId()

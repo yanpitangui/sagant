@@ -20,8 +20,8 @@ public enum OverlapPolicy
     /// <see cref="ScheduleStatus.FireCount"/> stands still.</para>
     ///
     /// <para>A schedule using this wants its target bounded — a workflow timeout, or a deadline on
-    /// whatever the target waits for — so that a run which stops making progress ends rather than
-    /// waiting. <see cref="Allow"/> trades the conflict back for a schedule that fires regardless.
+    /// whatever the target waits for — so that a run which stops making progress eventually ends on
+    /// its own. <see cref="Allow"/> trades that guard back for a schedule that fires regardless.
     /// </para>
     /// </summary>
     Skip,
@@ -36,8 +36,9 @@ public enum OverlapPolicy
 /// has as a command.</param>
 /// <param name="Overlap">See <see cref="OverlapPolicy"/>.</param>
 /// <param name="CatchUpWindow">How late an occurrence may be and still run. One missed by more than
-/// this is skipped, so a schedule coming back after a long outage runs once rather than firing every
-/// occurrence it slept through. <c>null</c> runs a late occurrence however late it is.</param>
+/// this is skipped, so a schedule coming back after a long outage runs once, catching up in a single
+/// fire, without replaying every occurrence it slept through. <c>null</c> runs a late occurrence
+/// however late it is.</param>
 /// <param name="EndsAfter">How many occurrences to run before the schedule finishes. <c>null</c>
 /// runs until deleted.</param>
 public sealed record StartSchedule(
@@ -49,8 +50,9 @@ public sealed record StartSchedule(
     int? EndsAfter = null)
 {
     /// <summary>
-    /// Names the target workflow at compile time, so a mistyped type fails the build rather than the
-    /// first fire. The command is checked at the call site against whatever that workflow handles.
+    /// Names the target workflow at compile time, so a mistyped type fails the build, at the call
+    /// site, before it ever gets near the first fire. The command is checked there too, against
+    /// whatever that workflow handles.
     /// </summary>
     public static StartSchedule For<TWorkflow>(
         IScheduleSpec spec,
@@ -62,8 +64,7 @@ public sealed record StartSchedule(
         new(spec, TWorkflow.WorkflowTypeName, command, overlap, catchUpWindow, endsAfter);
 }
 
-/// <summary>Holds a running schedule. It keeps its place, so resuming carries on rather than
-/// restarting.</summary>
+/// <summary>Holds a running schedule. It keeps its place, so resuming carries on from there.</summary>
 public sealed record PauseSchedule;
 
 /// <summary>Puts a held schedule back to work, computing its next occurrence from now.</summary>

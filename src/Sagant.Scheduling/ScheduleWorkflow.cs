@@ -12,7 +12,7 @@ namespace Sagant.Scheduling;
 /// <param name="TargetWorkflowType">Which workflow each occurrence starts.</param>
 /// <param name="TargetCommand">The command each occurrence sends — carried as <c>object</c> for the
 /// same reason <see cref="ChildStart.Command"/> is: a schedule addresses any workflow, so the type is
-/// settled at the call site that created it rather than by this one.</param>
+/// settled at the call site that created it — this one has no way to know it in advance.</param>
 /// <param name="NextFireUtc">The occurrence this schedule is currently waiting for.</param>
 /// <param name="FireCount">How many occurrences have started.</param>
 /// <param name="SkippedCount">How many were passed over, by overlap policy or the catch-up window.
@@ -42,14 +42,14 @@ public sealed record ScheduleState(
 /// instance back. Durability, retries, visibility and the command surface come from being an ordinary
 /// workflow. What is left is arithmetic: which instant comes next.
 ///
-/// <para>Recurrence stays here rather than being handed to whatever stores the deadline. A scheduler
-/// that computed its own occurrences would hold a copy of the truth in a place this instance's journal
-/// cannot see, and cron dialects differ enough between products that the copy would eventually
-/// disagree.</para>
+/// <para>Recurrence stays here, computed by this instance itself, on its own journal — nothing else
+/// stores or derives the deadline. A scheduler that computed its own occurrences would hold a copy of
+/// the truth in a place this instance's journal cannot see, and cron dialects differ enough between
+/// products that the copy would eventually disagree.</para>
 ///
-/// <para>An occurrence starts its target through <see cref="IWorkflowClient"/> rather than as a child.
-/// A run started that way is independent: it outlives the cycle that began it, so a schedule rolling
-/// its own history cannot take a still-running occurrence down with it.</para>
+/// <para>An occurrence starts its target through <see cref="IWorkflowClient"/>, as an independent run
+/// with no parent/child relationship to this schedule: it outlives the cycle that began it, so a
+/// schedule rolling its own history cannot take a still-running occurrence down with it.</para>
 /// </summary>
 public partial class ScheduleWorkflow : Workflow<ScheduleState>
 {
@@ -114,8 +114,8 @@ public partial class ScheduleWorkflow : Workflow<ScheduleState>
     /// Starts one occurrence and works out the next.
     ///
     /// The occurrence's id is derived from the instant it was scheduled for, so a fire that runs twice
-    /// — a duplicated wake, a retry — addresses the same instance both times and the second is the
-    /// engine's ordinary duplicate-command case rather than a second run of the work.
+    /// — a duplicated wake, a retry — addresses the same instance both times: the engine's ordinary
+    /// duplicate-command case handles the second one, and the work itself never runs twice.
     /// </summary>
     [WorkflowStep]
     public async Task<StepEffect<ScheduleState>> FireStep(StepContext<ScheduleState> ctx)
@@ -193,8 +193,8 @@ public partial class ScheduleWorkflow : Workflow<ScheduleState>
             return Effects.Reply("schedule was never configured");
         }
 
-        // Measured from now, so a schedule held across several occurrences resumes at the next one
-        // rather than firing everything it slept through.
+        // Measured from now, so a schedule held across several occurrences resumes at the next one,
+        // leaving whatever it slept through behind it.
         return Effects
             .UpdateState(ctx.State with { Paused = false, NextFireUtc = spec.NextAfter(_time.GetUtcNow()) })
             .TransitionTo(Steps.WaitStep)
@@ -254,8 +254,9 @@ public partial class ScheduleWorkflow : Workflow<ScheduleState>
             : OverlapSkipReason;
     }
 
-    /// <summary>Why an occurrence was passed over by <see cref="OverlapPolicy.Skip"/>, as opposed to by
-    /// the catch-up window. The two are counted apart, so this is matched rather than just reported.
+    /// <summary>Why an occurrence was passed over by <see cref="OverlapPolicy.Skip"/>, distinct from
+    /// the catch-up window's own reason. The two are counted apart, and this exact string is the
+    /// stable value a caller matches on.
     /// </summary>
     private const string OverlapSkipReason = "the previous occurrence is still running";
 
@@ -271,8 +272,9 @@ public partial class ScheduleWorkflow : Workflow<ScheduleState>
 
     /// <summary>
     /// The first occurrence strictly after <paramref name="now"/>, walking forward from
-    /// <paramref name="from"/>. Walking rather than computing against <paramref name="now"/> directly
-    /// is what keeps a schedule's phase: "every hour on the hour" stays on the hour after an outage.
+    /// <paramref name="from"/>, one occurrence at a time. Walking the spec forward from where the
+    /// schedule left off is what keeps its phase: "every hour on the hour" stays on the hour after an
+    /// outage — computing straight from <paramref name="now"/> would lose that alignment.
     /// </summary>
     private static DateTimeOffset? NextAfterNow(IScheduleSpec spec, DateTimeOffset from, DateTimeOffset now)
     {
@@ -291,8 +293,8 @@ public partial class ScheduleWorkflow : Workflow<ScheduleState>
             }
         }
 
-        // A gap wider than this many occurrences: land on the first one after now and carry on,
-        // giving up the original phase rather than the schedule.
+        // A gap wider than this many occurrences: land on the first one after now and carry on from
+        // there, on a new phase — the schedule itself keeps going; only its original alignment goes.
         return spec.NextAfter(now);
     }
 

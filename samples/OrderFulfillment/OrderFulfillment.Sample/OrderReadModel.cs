@@ -248,7 +248,7 @@ public sealed class OrderReadModelRepository(string connectionString)
     /// The order it belongs to is the part of its id before the separator, which is how
     /// <c>OrderFulfillmentWorkflow</c> scopes an item to its order.
     ///
-    /// The amount is unknown here: an event says an item ran, not what it was for. It is what
+    /// The amount is unknown here: an event says an item ran, without saying what it was for. It is what
     /// <see cref="PlaceOrderAsync"/> records for an order placed through the UI, and zero for one a
     /// schedule placed — which the UI shows as the item existing, with nothing claimed about its size.
     /// </summary>
@@ -280,7 +280,7 @@ public sealed class OrderReadModelRepository(string connectionString)
 
     /// <summary>
     /// Runs a write whose only purpose is that a row ends up present, treating "it is already there"
-    /// as the outcome rather than as a failure.
+    /// as the outcome itself, no different from a fresh insert succeeding.
     ///
     /// Every replica watches the same cluster-wide event stream, so all of them react to one event and
     /// all of them try to register the same row. A merge does not settle that on its own: two of them
@@ -358,8 +358,8 @@ public sealed class OrderReadModelRepository(string connectionString)
     /// <summary>Detail view for one order, including its item children's own step pipelines and
     /// logs — one level deep, matching <c>ItemFulfillmentWorkflow</c>'s own shape (it never spawns
     /// children of its own). Returns a tombstone snapshot (<c>Deleted: true</c>, no steps/log) for a
-    /// soft-deleted order rather than nothing, so navigating straight to a deleted order's URL shows
-    /// why it's gone instead of a bare "not found."</summary>
+    /// soft-deleted order, with something real to show, so navigating straight to a deleted order's
+    /// URL explains why it's gone, past a bare "not found."</summary>
     public async Task<OrderSnapshot?> SnapshotOfAsync(string orderId)
     {
         await using var db = Connect();

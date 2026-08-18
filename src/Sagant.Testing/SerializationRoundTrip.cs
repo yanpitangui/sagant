@@ -10,8 +10,8 @@ public sealed class SerializationRoundTripException(string message, Exception? i
 /// Worth checking because of when the alternative fails. A workflow's state and its commands are
 /// written to a journal and read back on recovery, and a schedule goes further — it stores the
 /// command it will send and replays it every time it fires. A value that writes cleanly and cannot
-/// be read leaves an instance durable and unrecoverable at once, and says so at a restart rather
-/// than at the call that wrote it.
+/// be read leaves an instance durable and unrecoverable at once, and says so only at a restart, far
+/// downstream from the call that wrote it.
 ///
 /// The failure is rarely in the type a caller is thinking about. A collection expression assigned to
 /// an <see cref="IReadOnlyList{T}"/> member compiles to a type with no public constructor, which a
@@ -71,10 +71,10 @@ public static class SerializationRoundTrip
                 + "public constructor. An array or a List<T> reads back.", ex);
         }
 
-        // Compared by writing the result again rather than by equality, because a record's generated
-        // equality compares a collection member by reference: an array that round-tripped perfectly
-        // would report as different, and most workflow state holds a collection. Writing again asks
-        // the question that matters — whether what came back still says the same thing.
+        // The comparison writes the result a second time and compares bytes: a record's generated
+        // equality compares a collection member by reference, so an array that round-tripped
+        // perfectly would report as different, and most workflow state holds a collection. Writing
+        // again asks the question that matters — whether what came back still says the same thing.
         byte[] rewritten;
         try
         {

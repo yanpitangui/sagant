@@ -75,8 +75,8 @@ public sealed class WorkflowDeadlineSettings
 
     /// <summary>
     /// How many times a bucket retries a wake that goes unanswered before letting the entry go. Used
-    /// by the bucket scheduler, where an entry lives inside one bucket rather than in an index a
-    /// disarm can reach — so the attempts are what bound a wake lost in transit. Exhausting them
+    /// by the bucket scheduler, where an entry lives inside its one bucket with no index a disarm
+    /// could reach — so the attempts are what bound a wake lost in transit. Exhausting them
     /// leaves the instance on guarantee <c>D8</c>'s terms: its deadline fires whenever something next
     /// activates it.
     /// </summary>
@@ -84,8 +84,8 @@ public sealed class WorkflowDeadlineSettings
 
     /// <summary>
     /// How many past buckets the ticker catches up on in one pass. A process down for a long stretch
-    /// walks the buckets it missed rather than skipping to the present, and this bounds how much of
-    /// that backlog one pass takes on.
+    /// walks every bucket it missed on its way back to the present, and this bounds how much of that
+    /// backlog one pass takes on.
     /// </summary>
     public int MaxBucketCatchUp { get; set; } = 240;
 

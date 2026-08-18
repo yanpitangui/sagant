@@ -14,9 +14,9 @@ internal sealed record BucketPoked(string BucketId);
 /// fires them and deletes itself.
 ///
 /// A cluster singleton, and the only durable state outside the buckets themselves: the last bucket it
-/// poked. That one fact is what makes a gap recoverable — a process down for an hour walks the hour
-/// of buckets it missed rather than skipping to the present, so the deadlines inside them fire late
-/// instead of never.
+/// poked. That one fact is what makes a gap recoverable — a process down for an hour walks every
+/// bucket across that hour on its way back to the present, so the deadlines inside them fire late,
+/// still within reach of the process that owed them.
 ///
 /// It knows nothing about which buckets hold anything. Poking an empty one costs an entity that
 /// recovers with nothing and stops, which is the trade that removes the index: the ticker needs no
@@ -46,8 +46,9 @@ internal sealed class DeadlineTickerActor : ReceivePersistentActor
         _buckets = buckets;
         _timeProvider = timeProvider;
 
-        // See DeadlineBucketActor: a journal hands recovery the Tagged wrapper rather than the
-        // payload, so both shapes are handled.
+        // See DeadlineBucketActor: a journal that indexes tags lifts them off on the way to recovery
+        // and hands back the plain payload; one with no tag support hands back the Tagged wrapper as
+        // written. Both shapes are handled here.
         Recover<Tagged>(t =>
         {
             if (t.Payload is BucketPoked poked)
@@ -145,8 +146,8 @@ internal sealed class DeadlineTickerActor : ReceivePersistentActor
     {
         _tick?.Cancel();
 
-        // Aligned to the next slice boundary, so a bucket is poked as its slice opens rather than
-        // drifting further into it with every pass.
+        // Aligned to the next slice boundary, so a bucket is poked right as its slice opens, on every
+        // pass.
         var now = _timeProvider.GetUtcNow();
         var nextBoundary = DeadlineBucket.Truncate(now) + DeadlineBucket.Interval;
         _tick = Context.System.Scheduler.ScheduleTellOnceCancelable(

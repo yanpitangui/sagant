@@ -17,9 +17,9 @@ internal delegate object WorkflowHandleFactory(IActorRef shardRegion, IActorRef 
 /// <summary>
 /// One instance per <see cref="ActorSystem"/> — an <see cref="IExtension"/>, because it has to be
 /// reachable from two places that don't share a container: the
-/// <c>WithWorkflow</c> registration callback (which only has the <see cref="ActorSystem"/>, via
-/// <c>AddStartup</c>, not an <see cref="IServiceProvider"/>) and <see cref="WorkflowClient"/>
-/// (constructed through DI). <see cref="WorkflowHandleRegistryProvider"/> is the standard
+/// <c>WithWorkflow</c> registration callback (which reaches it via <c>AddStartup</c>, holding only
+/// the <see cref="ActorSystem"/> itself) and <see cref="WorkflowClient"/> (constructed through DI).
+/// <see cref="WorkflowHandleRegistryProvider"/> is the standard
 /// Akka.NET "one instance of X per ActorSystem" accessor for it.
 /// </summary>
 internal sealed class WorkflowHandleRegistry : IExtension

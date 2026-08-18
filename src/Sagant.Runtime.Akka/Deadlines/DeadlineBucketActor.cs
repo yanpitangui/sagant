@@ -82,9 +82,10 @@ internal sealed class DeadlineBucketActor : ReceivePersistentActor
         _client = client;
         _timeProvider = timeProvider;
 
-        // Recovery is offered whatever was written, and what was written is Tagged — a journal hands
-        // the wrapper back rather than the payload inside it, the same way WorkflowEntityActor's own
-        // recovery reads one. Both shapes are handled so this holds whichever a journal does.
+        // What was written is always Tagged (see Internal below). A journal that indexes tags lifts
+        // the wrapper off on the way to recovery and hands back the plain payload; one with no tag
+        // support hands back the Tagged wrapper as written — the same distinction
+        // WorkflowEntityActor's own recovery handles. Both shapes are recovered here.
         Recover<Tagged>(t => ApplyRecovered(t.Payload));
         Recover<DeadlinePlaced>(e => ApplyRecovered(e));
         Recover<BucketDrained>(e => ApplyRecovered(e));
@@ -97,8 +98,8 @@ internal sealed class DeadlineBucketActor : ReceivePersistentActor
         Command<BucketCommands.GetCount>(_ => Sender.Tell(_deadlines.Count));
         // A drained bucket stays put and goes quiet. ClusterSharding's idle passivation is what reaps
         // it, on the same handshake it uses for every other entity, so the Shard holds anything still
-        // addressed here and hands it to whatever comes next. A bucket covers a slice rather than one
-        // deadline, and a schedule firing several times a minute re-arms into the slice it just fired
+        // addressed here and hands it to whatever comes next. A bucket covers a whole slice of many
+        // deadlines, and a schedule firing several times a minute re-arms into the slice it just fired
         // out of — so an arm landing right after a drain is ordinary traffic that has to survive.
         Command<DeleteMessagesSuccess>(_ => { });
         Command<DeleteMessagesFailure>(msg =>
@@ -177,9 +178,9 @@ internal sealed class DeadlineBucketActor : ReceivePersistentActor
         // below leaves it.
         var materializer = Context.Materializer();
 
-        // Piped rather than awaited, so the result arrives as a message on this actor's own thread and
-        // a failure arrives the same way. A pass that ended without reporting would leave the bucket
-        // believing it is still firing, and nothing would ever fire it again.
+        // Piped, so the result arrives as a message on this actor's own thread, success and failure
+        // alike. A pass that ended without reporting would leave the bucket believing it is still
+        // firing, and nothing would ever fire it again.
         WakeAllAsync(due, materializer).PipeTo(
             Self,
             success: settled => settled,
@@ -293,8 +294,8 @@ internal sealed class DeadlineBucketActor : ReceivePersistentActor
 
     /// <summary>
     /// Records that this bucket is finished, then releases everything it wrote. The record is what
-    /// makes recovery after a crash mid-delete land on an empty bucket rather than firing the same
-    /// deadlines a second time.
+    /// makes recovery after a crash mid-delete land on an empty bucket, with the same deadlines fired
+    /// exactly once.
     ///
     /// The bucket itself stays, empty and quiet, for idle passivation to reap on the Shard's own terms.
     /// </summary>

@@ -112,7 +112,8 @@ public sealed class StepRegistryGenerator : IIncrementalGenerator
         }
 
         // Two workflow classes may share one TState; the shape diagnostics below describe the state
-        // type, so report each one once rather than once per workflow that uses it.
+        // type, so this tracks which types have been reported, keeping each one to a single report
+        // across every workflow that uses it.
         var stateTypesAlreadyChecked = new HashSet<string>();
 
         // One workflow, one generated file, however many `partial` blocks it is written across.
@@ -165,9 +166,8 @@ public sealed class StepRegistryGenerator : IIncrementalGenerator
             }
 
             // The generated members are emitted inside the same containing-class chain as the
-            // workflow class (see GenerateSource) — every level of that chain, not just the
-            // workflow class itself, has to be reopened as partial for the generated file to
-            // compile.
+            // workflow class (see GenerateSource) — the whole chain, workflow class and every class
+            // containing it, has to be reopened as partial for the generated file to compile.
             var containingChain = GetContainingClassChain(classDecl);
             var notPartial = allDeclarations.Concat(containingChain).FirstOrDefault(c => !IsPartial(c));
             if (notPartial is not null)

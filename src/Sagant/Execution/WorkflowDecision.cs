@@ -69,8 +69,8 @@ public abstract record WorkflowDecision
     }
 
     /// <summary>The run finished; report how. Separate from
-    /// <see cref="RecordStatusChange"/> because the useful dimension is the outcome, not the status
-    /// every finished run shares.</summary>
+    /// <see cref="RecordStatusChange"/> because the outcome is the dimension worth reporting here —
+    /// every finished run shares the same status, so that alone says nothing.</summary>
     public sealed record RecordOutcome(WorkflowOutcome Outcome) : WorkflowDecision;
 
     /// <summary>Arm a live timer for a deadline the envelope now carries.</summary>

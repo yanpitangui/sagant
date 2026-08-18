@@ -24,10 +24,10 @@ public sealed record PlaceOrder(
 public sealed record ApproveOrder;
 
 /// <summary>Read-only query — the engine treats <c>OrderState</c> as opaque, so exposing it (or
-/// any slice of it) is the workflow author's job, not something the engine does generically.
-/// Handled by a <c>[WorkflowQuery]</c>: this is what the live SSE UI polls to show a step
-/// executing/retrying/compensating in real time, and a query dispatches immediately instead of
-/// waiting for the current step to settle, which is what makes watching it live possible.</summary>
+/// any slice of it) is entirely the workflow author's job; the engine itself does none of it
+/// generically. Handled by a <c>[WorkflowQuery]</c>: this is what the live SSE UI polls to show a
+/// step executing/retrying/compensating in real time, and a query dispatches immediately, with no
+/// wait for the current step to settle, which is what makes watching it live possible.</summary>
 public sealed record GetOrderState;
 
 /// <summary>Starts one <see cref="ItemFulfillmentWorkflow"/> instance — sent as the

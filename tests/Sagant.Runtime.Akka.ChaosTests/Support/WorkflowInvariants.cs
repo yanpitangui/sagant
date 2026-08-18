@@ -8,11 +8,11 @@ namespace Sagant.Runtime.Akka.ChaosTests.Support;
 /// What must hold for a workflow instance once the dust settles, checked against the events it
 /// actually recorded.
 ///
-/// Asserting after the fact rather than during is what makes a chaos test worth trusting. A test
-/// that checks state while faults are still landing is asserting on timing, and will be flaky for
-/// reasons that have nothing to do with the engine. Recorded events are durable facts: they can be
-/// read once the cluster is quiet, and they say what really happened rather than what a probe
-/// happened to observe.
+/// Asserting only after the fact is what makes a chaos test worth trusting. A test that checks
+/// state while faults are still landing is asserting on timing, and will be flaky for reasons that
+/// have nothing to do with the engine. Recorded events are durable facts: they can be read once the
+/// cluster is quiet, and they say what really happened, settling the question a probe catching
+/// something mid-flight cannot.
 ///
 /// Harness-independent by construction — it needs only an <see cref="IWorkflowEventFeed"/>, so the
 /// same assertions run against an in-process cluster, separate node processes, or a deployment.
@@ -105,8 +105,8 @@ public static class WorkflowInvariants
     /// <summary>
     /// Guarantee D2: a deadline survives a crash as an absolute instant, so recovery resumes the
     /// remaining wait. A step deadline moving <em>later</em> across a restart of the same attempt
-    /// would mean the clock was restarted rather than resumed, which is how a workflow silently
-    /// outlives the bound its author set.
+    /// would mean the clock itself restarted, a silent way for a workflow to outlive the bound its
+    /// author set.
     /// </summary>
     private static void AssertDeadlinesOnlyEverResume(string entityId, List<WorkflowEvent> events)
     {

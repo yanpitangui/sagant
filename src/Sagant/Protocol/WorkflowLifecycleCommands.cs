@@ -22,7 +22,7 @@ public sealed record Terminate(string? Reason = null);
 /// its own timeout, its own retry budget — and decides the run's final outcome. With no cancellation
 /// step configured there is nothing to unwind, so the run finishes immediately.
 ///
-/// Either way the run reports <see cref="WorkflowOutcome.Cancelled"/>, not
+/// Either way the run reports <see cref="WorkflowOutcome.Cancelled"/>, distinct from
 /// <see cref="WorkflowOutcome.Terminated"/>: the two say different things about what was asked for,
 /// and that distinction is worth keeping even when the effect happened to be the same.
 ///

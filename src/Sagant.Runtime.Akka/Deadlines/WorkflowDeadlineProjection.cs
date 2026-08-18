@@ -68,8 +68,8 @@ public sealed class WorkflowDeadlineProjection
     /// caller holding a checkpoint passes it, which is what keeps a restart from re-reading a journal
     /// that only grows.</param>
     /// <param name="onProgress">Called with each offset applied, so a caller can record how far this
-    /// has got. Called after the change it names is recorded, so a crash between the two repeats an
-    /// arm rather than skipping one.</param>
+    /// has got. Called after the change it names is recorded, so a crash between the two lands on a
+    /// repeated arm, never a skipped one.</param>
     public async Task<IKillSwitch> RunAsync(
         Offset? from = null,
         Func<Offset, Task>? onProgress = null,
@@ -89,9 +89,9 @@ public sealed class WorkflowDeadlineProjection
     /// Folds the history into the set of deadlines still waiting at the end of it, records those, and
     /// answers with the offset the fold reached.
     ///
-    /// <c>CurrentEventsByTag</c> rather than the live query, because this wants the history as it
-    /// stands and an end to it. Nothing is recorded while folding: an instance that paused and later
-    /// finished contributes nothing, which is most of a journal's history.
+    /// This reads through <c>CurrentEventsByTag</c>, the finite form of the query: it wants the
+    /// history as it stands, with an end to it. Nothing is recorded while folding: an instance that
+    /// paused and later finished contributes nothing, which is most of a journal's history.
     /// </summary>
     private async Task<Offset> BackfillAsync(CancellationToken cancellationToken)
     {
@@ -145,8 +145,8 @@ public sealed class WorkflowDeadlineProjection
     {
         var lanes = _settings.ProjectionLanes;
 
-        // Resumed from wherever it reached rather than from the start, so a failure costs the events
-        // since the last recorded position instead of the whole journal.
+        // Resumed from wherever it reached, so a failure costs only the events since the last
+        // recorded position — a small, bounded fraction of the journal.
         var resumeFrom = from;
 
         var lanesMerged = (Source<Offset, NotUsed>)RestartSource.OnFailuresWithBackoff(
@@ -155,10 +155,10 @@ public sealed class WorkflowDeadlineProjection
                 minBackoff: TimeSpan.FromSeconds(1),
                 maxBackoff: TimeSpan.FromSeconds(30),
                 randomFactor: 0.2))
-            // Hashed rather than round-robined, so every event of one instance lands in the same lane
-            // and stays in the order the journal holds it. MurmurHash for the same reason sharding
-            // uses it: string.GetHashCode() is randomized per process, which would move an instance
-            // between lanes on a restart and let two of its events run concurrently.
+            // Hashed onto a lane, so every event of one instance lands in the same lane and stays in
+            // the order the journal holds it. MurmurHash for the same reason sharding uses it:
+            // string.GetHashCode() is randomized per process, so hashing on that would move an
+            // instance between lanes on a restart and let two of its events run concurrently.
             .GroupBy(lanes, e => (int)((uint)MurmurHash.StringHash(e.PersistenceId) % (uint)lanes))
             // One at a time within a lane, so the last arm an instance recorded is the one that wins.
             .SelectAsync(1, async e =>
@@ -175,8 +175,8 @@ public sealed class WorkflowDeadlineProjection
                 Sink.ForEach<Offset>(offset =>
                 {
                     // Held so a restart resumes here, and handed to the caller so it can outlive this
-                    // process. Recorded after the change it names, which makes a crash between the two
-                    // repeat an arm rather than skip one.
+                    // process. Recorded after the change it names, so a crash between the two lands on
+                    // a repeated arm, never a skipped one.
                     resumeFrom = offset;
                     onProgress?.Invoke(offset);
                 }),

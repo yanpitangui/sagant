@@ -11,8 +11,9 @@ public class WorkflowDeadlineSettingsTests
 {
     /// <summary>
     /// The threshold has to sit below the passivation window, or a deadline landing between the two is
-    /// left to an instance that is no longer there to fire it. Both defaults ship from this repo, so
-    /// their relationship is worth pinning rather than leaving to whoever edits one of them.
+    /// left to an instance that has already gone away by the time it comes due. Both defaults ship
+    /// from this repo, so their relationship is worth pinning down here, explicitly, for whoever
+    /// edits one of them.
     /// </summary>
     [Fact]
     public void TheDefaultThreshold_SitsBelowTheDefaultPassivationWindow() =>
@@ -23,8 +24,8 @@ public class WorkflowDeadlineSettingsTests
 
     /// <summary>
     /// Passivation is on by default, which is what the whole deadline scheme exists to make safe. A
-    /// change back to holding every instance resident is a memory decision a deployment makes, not one
-    /// this package makes for it.
+    /// change back to holding every instance resident is a memory decision that belongs entirely to
+    /// the deployment making it.
     /// </summary>
     [Fact]
     public void IdlePassivation_IsOnByDefault() =>

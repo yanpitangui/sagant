@@ -60,7 +60,7 @@ public StepEffect<OrderState> WaitForPaymentWebhook() =>
     StepEffects.ThenPause(PauseSettings.WithTimeout(TimeSpan.FromHours(1)).TimeoutHandler(Steps.EscalateStep));
 ```
 
-❌ a step that polls a payment provider in a loop instead of pausing until its webhook arrives.
+❌ a step that polls a payment provider in a loop, where pausing until its webhook arrives would do.
 
 ## 4. Child workflow vs inline steps
 
@@ -91,7 +91,7 @@ branching on it after recovery days later.
 Reach for a per-step `StepRecovery` override when a step's failure profile differs from the
 workflow's default (e.g. a flaky third-party call wants more retries than an in-house one); rely on
 `DefaultStepRecovery` otherwise. Reach for `FailoverTo` a compensating step when exhausting retries
-should trigger cleanup (e.g. refund), rather than just ending the workflow in a failed state with
+should trigger cleanup (e.g. refund) — the alternative just ends the workflow in a failed state with
 nothing rolled back.
 
 ✅

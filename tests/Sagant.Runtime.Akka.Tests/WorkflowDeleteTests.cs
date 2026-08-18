@@ -114,8 +114,8 @@ public class WorkflowDeleteTests : WorkflowActorTestKit
         actor.Tell(new GetStatus(), TestActor);
         Assert.Equal(WorkflowStatus.Finished, ExpectMsg<WorkflowStatusReply>().Status);
 
-        // Purging an already-terminal workflow's leftover data is the primary use case, not an edge
-        // case — no early-return the way ApplyTerminate has for an already-terminal status.
+        // Purging an already-terminal workflow's leftover data is the primary use case here — no
+        // early-return the way ApplyTerminate has for an already-terminal status.
         actor.Tell(new Delete(), TestActor);
         ExpectMsg<Sagant.Protocol.Done>();
         SimulateShardEchoAndAwaitStop(actor);
@@ -193,7 +193,7 @@ public class WorkflowDeleteTests : WorkflowActorTestKit
             Assert.Equal(WorkflowStatus.Paused, ExpectMsg<WorkflowStatusReply>().Status);
         }, TimeSpan.FromSeconds(10));
 
-        // The child is deleted directly (an operator cleaning it up), not reached via its own
+        // The child is deleted directly here (an operator cleaning it up), bypassing its own
         // business logic — the parent still needs to hear about it, but as what it actually was: a
         // child that went away without finishing, which is not the same thing as one that completed.
         childActor.Tell(new Delete(), TestActor);
