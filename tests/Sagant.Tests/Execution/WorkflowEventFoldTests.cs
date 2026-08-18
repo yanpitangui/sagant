@@ -193,6 +193,34 @@ public class WorkflowEventFoldTests
         Assert.Equal(ChildStatus.Pending, envelope.Children![b.RelationshipId].Status);
     }
 
+    /// <summary>A report bumps its own group's running tally and leaves every other group's alone —
+    /// the fold looks the touched member's <c>GroupId</c> up before deciding which group to update.</summary>
+    [Fact]
+    public void ChildMemberUpdated_BumpsOnlyItsOwnGroupsTally()
+    {
+        var a = Relationship("item-a");
+        var b = Relationship("item-b") with { RelationshipId = "parent:group-2:item-b", GroupId = "group-2" };
+        var groupOne = new ChildGroupState("group-1", 0, CompletionPolicy.AllSuccessful, FailurePolicy.WaitForAll,
+            RemainingChildrenPolicy.Terminate, "OnDone", false, Total: 1);
+        var groupTwo = new ChildGroupState("group-2", 0, CompletionPolicy.AllSuccessful, FailurePolicy.WaitForAll,
+            RemainingChildrenPolicy.Terminate, "OnDone", false, Total: 1);
+
+        var envelope = WorkflowEventFold.ApplyAll(Fresh(), new WorkflowEvent[]
+        {
+            new WorkflowEvent.ChildrenAwaited("group-1", new[] { a }, groupOne, 1, null, TestCause),
+            new WorkflowEvent.ChildrenAwaited("group-2", new[] { b }, groupTwo, 2, null, TestCause),
+            new WorkflowEvent.ChildMemberUpdated(a.RelationshipId, ChildStatus.Completed, null, null, null),
+        });
+
+        var updatedGroupOne = envelope.ChildGroups!["group-1"];
+        Assert.Equal(1, updatedGroupOne.Settled);
+        Assert.Equal(1, updatedGroupOne.Completed);
+
+        var untouchedGroupTwo = envelope.ChildGroups!["group-2"];
+        Assert.Equal(0, untouchedGroupTwo.Settled);
+        Assert.Equal(0, untouchedGroupTwo.Completed);
+    }
+
     /// <summary>
     /// Compares two envelopes by value throughout. <see cref="WorkflowRuntimeState{TState}"/> is a
     /// record, but its collection members compare by reference under the compiler-generated equality,

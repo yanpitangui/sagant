@@ -1544,16 +1544,24 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
             return;
         }
 
+        // A member reports exactly once (H4); the seqNr-deduped delivery path already stops a
+        // redelivered notification from reaching here twice, but this member's own status is the
+        // direct check — cheap, since it is already in hand, and what lets the O(1) tally below trust
+        // that every report it counts is genuinely this member's first.
+        if (member.Status is not (ChildStatus.Pending or ChildStatus.TerminationRequested))
+        {
+            confirmDelivery?.Invoke();
+            return;
+        }
+
         var memberUpdated = new WorkflowEvent.ChildMemberUpdated(
             notification.RelationshipId, notification.Status, notification.Result,
             notification.Failure, notification.ResultTraceParent);
 
-        // One pass counts this group's members as they will stand once the report is applied. A
-        // fan-out asks this once per child, so it reads the list the instance already holds and
-        // allocates nothing; the members themselves are collected below, by the one report that
-        // resolves the group and needs them.
-        var tally = ChildGroupPolicy.TallyGroup(
-            existing, member.GroupId, notification.RelationshipId, notification.Status);
+        // Read directly off the group's own running counters — O(1), no scan of this instance's
+        // children. The members themselves are collected below, by the one report that resolves the
+        // group and needs them.
+        var tally = ChildGroupPolicy.TallyGroup(group, notification.Status);
 
         // The parent's own handler sees this child before its group's policy is consulted, so it can
         // fold the report into state and — where the report settles the matter on business grounds

@@ -171,10 +171,7 @@ public static class WorkflowEventFold
                 ChildGroups = With(envelope.ChildGroups, e.GroupId, e.Group),
             },
 
-            WorkflowEvent.ChildMemberUpdated e => envelope with
-            {
-                Children = UpdateMember(envelope.Children, e),
-            },
+            WorkflowEvent.ChildMemberUpdated e => ApplyChildMemberUpdated(envelope, e),
 
             WorkflowEvent.ChildGroupFinalized e => FinalizeGroup(envelope, e),
 
@@ -239,6 +236,33 @@ public static class WorkflowEventFold
             : new Dictionary<string, ChildGroupState>(groups);
         updated[groupId] = group;
         return updated;
+    }
+
+    /// <summary>
+    /// One child's report, folded into both homes it touches: the member itself
+    /// (<see cref="UpdateMember"/>) and its group's running tally, kept in the same step so the two
+    /// can never read as disagreeing. The group lookup comes from the member's own
+    /// <see cref="ChildWorkflowRelationship.GroupId"/>, read before the member is overwritten.
+    /// </summary>
+    private static WorkflowRuntimeState<TState> ApplyChildMemberUpdated<TState>(
+        WorkflowRuntimeState<TState> envelope, WorkflowEvent.ChildMemberUpdated e)
+    {
+        var groupId = envelope.Children != null && envelope.Children.TryGetValue(e.RelationshipId, out var member)
+            ? member.GroupId
+            : null;
+
+        var groups = envelope.ChildGroups;
+        if (groupId is not null && envelope.ChildGroups?.TryGetValue(groupId, out var group) == true)
+        {
+            groups = With(envelope.ChildGroups, groupId, group with
+            {
+                Settled = group.Settled + 1,
+                Completed = group.Completed + (e.Status == ChildStatus.Completed ? 1 : 0),
+                Failed = group.Failed + (e.Status is ChildStatus.Failed or ChildStatus.Cancelled or ChildStatus.Terminated ? 1 : 0),
+            });
+        }
+
+        return envelope with { Children = UpdateMember(envelope.Children, e), ChildGroups = groups };
     }
 
     /// <summary>

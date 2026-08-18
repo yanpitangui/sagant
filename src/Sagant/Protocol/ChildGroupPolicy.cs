@@ -28,48 +28,28 @@ public static class ChildGroupPolicy
     public readonly record struct ChildGroupTally(int Total, int Settled, int Failed, int Completed);
 
     /// <summary>
-    /// Counts one group's members in a single pass, reading <paramref name="reportedStatus"/> for
-    /// <paramref name="reportedRelationshipId"/> — the status the report being applied gives it, ahead
-    /// of that report being folded in.
-    ///
-    /// Takes the whole child map, so a caller holding it already has answers for the group without
-    /// building a copy. A group's members are scattered across every relationship this instance has
-    /// ever started, so answering for one group still means visiting every value once.
+    /// The tally after folding <paramref name="reportedStatus"/> in for the one member it names —
+    /// read directly off <paramref name="group"/>'s own running counters, ahead of that report
+    /// actually being folded in. O(1), straight from <see cref="ChildGroupState"/>'s own count, with
+    /// no scan of the child map at all.
     /// </summary>
-    public static ChildGroupTally TallyGroup(
-        IImmutableDictionary<string, ChildWorkflowRelationship> children,
-        string groupId,
-        string reportedRelationshipId,
-        ChildStatus reportedStatus)
+    public static ChildGroupTally TallyGroup(ChildGroupState group, ChildStatus reportedStatus)
     {
-        var total = 0;
-        var settled = 0;
-        var failed = 0;
-        var completed = 0;
+        var settled = group.Settled + 1;
+        var failed = group.Failed;
+        var completed = group.Completed;
 
-        foreach (var child in children.Values)
+        switch (reportedStatus)
         {
-            if (child.GroupId != groupId)
-            {
-                continue;
-            }
-
-            total++;
-            var status = child.RelationshipId == reportedRelationshipId ? reportedStatus : child.Status;
-            switch (status)
-            {
-                case ChildStatus.Completed:
-                    completed++;
-                    settled++;
-                    break;
-                case ChildStatus.Failed or ChildStatus.Cancelled or ChildStatus.Terminated:
-                    failed++;
-                    settled++;
-                    break;
-            }
+            case ChildStatus.Completed:
+                completed++;
+                break;
+            case ChildStatus.Failed or ChildStatus.Cancelled or ChildStatus.Terminated:
+                failed++;
+                break;
         }
 
-        return new ChildGroupTally(total, settled, failed, completed);
+        return new ChildGroupTally(group.Total, settled, failed, completed);
     }
 
     /// <summary>

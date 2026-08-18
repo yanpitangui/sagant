@@ -8,15 +8,18 @@ namespace Sagant.Benchmarks;
 /// <summary>
 /// What one child report costs a parent awaiting a group of <see cref="GroupSize"/> children — the
 /// path guarantee H5 names ("a fan-out's per-report cost stays flat as the group grows"). A report
-/// runs three things in sequence on the real path: a scan to answer whether the group has resolved
-/// (<see cref="ChildGroupPolicy.TallyGroup"/>), the fold that records the report
-/// (<see cref="FoldOneReport"/>), and — only for the report that resolves the group — evaluating the
-/// outcome from that same tally. Benchmarked here in isolation, so a regression in one shows up
-/// without the others masking it.
+/// runs three things in sequence on the real path: reading whether the group has resolved
+/// (<see cref="ChildGroupPolicy.TallyGroup"/>, O(1) — <see cref="ChildGroupState"/> carries its own
+/// running tally), the fold that records the report (<see cref="FoldOneReport"/>), and — only for the
+/// report that resolves the group — evaluating the outcome from that same tally. Benchmarked here in
+/// isolation, so a regression in any one of them shows up on its own.
 ///
-/// <see cref="GroupSize"/> is what H5 is actually a claim about: the scan itself stays O(n) by
-/// necessity — there is no way to answer for a child without looking at it — what these benchmarks
-/// hold to a flat cost per report is the allocation the fold makes to record one member's change.
+/// <see cref="GroupSize"/> exercises <see cref="FoldOneReport"/> alone now: it grows
+/// <c>WorkflowRuntimeState.Children</c>, the map size <see cref="ChildGroupPolicy.TallyGroup"/> is
+/// independent of, reading <see cref="ChildGroupState"/>'s own count directly instead.
+/// <c>TallyGroup</c>/<c>EvaluateGroupOutcome</c> stay in this <c>GroupSize</c>-parameterized suite
+/// anyway, so a future regression that reintroduces a scan shows up as their numbers growing with
+/// size again.
 /// </summary>
 [MemoryDiagnoser]
 public class ChildFanOutBenchmarks
@@ -27,6 +30,7 @@ public class ChildFanOutBenchmarks
     private WorkflowRuntimeState<string> _envelope = null!;
     private string _reportedRelationshipId = null!;
     private WorkflowEvent.ChildMemberUpdated _reportEvent = null!;
+    private ChildGroupState _group = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -51,15 +55,15 @@ public class ChildFanOutBenchmarks
                 Command: new object()));
         }
 
-        var group = new ChildGroupState(
+        _group = new ChildGroupState(
             groupId, Generation: 0, CompletionPolicy.AllSuccessful, FailurePolicy.WaitForAll,
-            RemainingChildrenPolicy.Continue, "OnDone", Finalized: false, null, null);
+            RemainingChildrenPolicy.Continue, "OnDone", Finalized: false, null, null, Total: GroupSize);
 
         // Seeded through the real fold path, so Children is exactly what a live instance holds: an
         // ImmutableDictionary built by WorkflowEventFold.Concat, keyed by RelationshipId.
         _envelope = WorkflowEventFold.Apply(
             new WorkflowRuntimeState<string>("state", null, null, 0, WorkflowStatus.Running),
-            new WorkflowEvent.ChildrenAwaited(groupId, children, group, 1, null, new TransitionCause.Control("seed")));
+            new WorkflowEvent.ChildrenAwaited(groupId, children, _group, 1, null, new TransitionCause.Control("seed")));
 
         // The middle child: an ordinary report, well clear of whatever a first-or-last id's position
         // might do to a scan.
@@ -70,7 +74,7 @@ public class ChildFanOutBenchmarks
     /// <summary>The read side of a report: does this settle the group, and how.</summary>
     [Benchmark]
     public ChildGroupPolicy.ChildGroupTally TallyGroup() =>
-        ChildGroupPolicy.TallyGroup(_envelope.Children!, "g1", _reportedRelationshipId, ChildStatus.Completed);
+        ChildGroupPolicy.TallyGroup(_group, ChildStatus.Completed);
 
     /// <summary>The write side: recording one member's report against the group's current state.</summary>
     [Benchmark]
@@ -81,10 +85,7 @@ public class ChildFanOutBenchmarks
     [Benchmark]
     public GroupOutcome? EvaluateGroupOutcome()
     {
-        var group = new ChildGroupState(
-            "g1", Generation: 0, CompletionPolicy.AllSuccessful, FailurePolicy.WaitForAll,
-            RemainingChildrenPolicy.Continue, "OnDone", Finalized: false, null, null);
-        var tally = ChildGroupPolicy.TallyGroup(_envelope.Children!, "g1", _reportedRelationshipId, ChildStatus.Completed);
-        return ChildGroupPolicy.EvaluateGroupOutcome(group, tally);
+        var tally = ChildGroupPolicy.TallyGroup(_group, ChildStatus.Completed);
+        return ChildGroupPolicy.EvaluateGroupOutcome(_group, tally);
     }
 }

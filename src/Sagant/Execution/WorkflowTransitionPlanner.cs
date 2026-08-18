@@ -130,9 +130,10 @@ public static class WorkflowTransitionPlanner
                 break;
 
             case Transition.AwaitChildrenTransition awaitChildren:
+                var relationships = BuildRelationships(awaitChildren, groupId!, identity, lastTraceParent).ToList();
                 events.Add(new WorkflowEvent.ChildrenAwaited(
                     groupId!,
-                    BuildRelationships(awaitChildren, groupId!, identity, lastTraceParent).ToList(),
+                    relationships,
                     new ChildGroupState(
                         groupId!, Generation: 0, awaitChildren.CompletionPolicy, awaitChildren.FailurePolicy,
                         awaitChildren.RemainingChildrenPolicy, awaitChildren.ResumeStepName, Finalized: false,
@@ -141,7 +142,8 @@ public static class WorkflowTransitionPlanner
                         awaitChildren is { Timeout: { } groupTimeout, TimeoutStepName: not null }
                             ? now + groupTimeout
                             : null,
-                        awaitChildren.TimeoutStepName),
+                        awaitChildren.TimeoutStepName,
+                        Total: relationships.Count),
                     awaitChildren.GroupId is null ? envelope.ChildGroupSequence + 1 : envelope.ChildGroupSequence,
                     lastTraceParent,
                     cause));
