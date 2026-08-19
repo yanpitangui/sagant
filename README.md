@@ -6,12 +6,13 @@ crash-safe recovery — without hand-rolling a state machine or a persistence mo
 
 Sagant is split into a runtime-agnostic core and a pluggable runtime:
 
-| Package | What it is |
-|---|---|
-| `Sagant` | Workflow authoring: `Workflow<TState>`, effects, settings, `[WorkflowStep]`/`[WorkflowCommandHandler]`. No dependency on any execution engine. See [`docs/workflow-model.md`](docs/workflow-model.md). |
-| `Sagant.Runtime.Akka` | Runs a workflow via a persistent Akka.NET `ClusterSharding` entity actor. Implements `Sagant`'s `IWorkflowClient`/`IWorkflowHandle` contract. See [`docs/akka-runtime.md`](docs/akka-runtime.md). |
-| `Sagant.SourceGenerators` | Roslyn generator behind `[WorkflowStep]`/`[WorkflowCommandHandler]` — zero-reflection dispatch tables, AOT-friendly. See [`docs/workflow-model.md`](docs/workflow-model.md#the-source-generator). |
-| `Sagant.Testing` | `WorkflowTestHarness<TWorkflow, TState>` for testing a workflow's own logic with zero infrastructure — no `ActorSystem`, no persistence. See [`docs/testing.md`](docs/testing.md). |
+| Package | NuGet | What it is |
+|---|---|---|
+| `Sagant` | [![NuGet](https://img.shields.io/nuget/v/Sagant.svg)](https://www.nuget.org/packages/Sagant) | Workflow authoring: `Workflow<TState>`, effects, settings, `[WorkflowStep]`/`[WorkflowCommandHandler]`. No dependency on any execution engine. See [`docs/workflow-model.md`](docs/workflow-model.md). |
+| `Sagant.Runtime.Akka` | [![NuGet](https://img.shields.io/nuget/v/Sagant.Runtime.Akka.svg)](https://www.nuget.org/packages/Sagant.Runtime.Akka) | Runs a workflow via a persistent Akka.NET `ClusterSharding` entity actor. Implements `Sagant`'s `IWorkflowClient`/`IWorkflowHandle` contract. See [`docs/akka-runtime.md`](docs/akka-runtime.md). |
+| `Sagant.SourceGenerators` | — (bundled in `Sagant`) | Roslyn generator behind `[WorkflowStep]`/`[WorkflowCommandHandler]` — zero-reflection dispatch tables, AOT-friendly. See [`docs/workflow-model.md`](docs/workflow-model.md#the-source-generator). |
+| `Sagant.Testing` | [![NuGet](https://img.shields.io/nuget/v/Sagant.Testing.svg)](https://www.nuget.org/packages/Sagant.Testing) | `WorkflowTestHarness<TWorkflow, TState>` for testing a workflow's own logic with zero infrastructure — no `ActorSystem`, no persistence. See [`docs/testing.md`](docs/testing.md). |
+| `Sagant.Scheduling` / `Sagant.Scheduling.Akka` | [![NuGet](https://img.shields.io/nuget/v/Sagant.Scheduling.svg)](https://www.nuget.org/packages/Sagant.Scheduling) / [![NuGet](https://img.shields.io/nuget/v/Sagant.Scheduling.Akka.svg)](https://www.nuget.org/packages/Sagant.Scheduling.Akka) | `ScheduleWorkflow` — starts other workflows on a recurring cron/interval cadence. See [`docs/deadlines-and-scheduling.md`](docs/deadlines-and-scheduling.md). |
 
 A different runtime just needs to drive `Workflow<TState>` through the generated dispatch tables
 and implement `IWorkflowClient`/`IWorkflowHandle`.
