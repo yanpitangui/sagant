@@ -49,6 +49,62 @@ public class WorkflowCompletionWatchTests : WorkflowActorTestKit
         Assert.False(parked.IsCompleted);
     }
 
+    /// <summary>
+    /// A business pause releases its waiters too, the same as a parked run — nothing went wrong, but a
+    /// caller has just as little reason to keep blocking through however long the pause lasts.
+    /// CurrentStepName reads null: RunPaused clears it, since a pause has no step to resume — only a
+    /// command to wait for.
+    /// </summary>
+    [Fact]
+    public void WatchForCompletion_WhenTheRunPauses_NotifiedWaitingWithTheReasonGiven()
+    {
+        var actor = CreateActor(nameof(WatchForCompletion_WhenTheRunPauses_NotifiedWaitingWithTheReasonGiven), Script()
+            .Step("AwaitApproval", (_, _) => Task.FromResult(new StepEffectsBuilder<TestState>().ThenPause("awaiting approval")))
+            .Command<StartWorkflow>((_, _) =>
+                new EffectsBuilder<TestState>().TransitionTo(Step("AwaitApproval")).ThenReply("accepted")));
+        actor.Tell(new StartWorkflow(1), TestActor);
+        ExpectMsg<string>();
+
+        actor.Tell(new WatchForCompletion<TestState>(), TestActor);
+
+        var waiting = Assert.IsType<WorkflowResult<TestState>.Waiting>(
+            ExpectMsg<WorkflowResult<TestState>>(TimeSpan.FromSeconds(5)));
+        Assert.Equal(WorkflowStatus.Paused, waiting.Status);
+        Assert.Equal("awaiting approval", waiting.Reason.Reason);
+        Assert.Null(waiting.Reason.CurrentStepName);
+        Assert.Null(waiting.Failure);
+        Assert.False(waiting.IsCompleted);
+    }
+
+    /// <summary>
+    /// An operator hold releases its waiters the same way — CurrentStepName reads populated here,
+    /// since RunSuspended keeps it, for Resume to know what to re-execute.
+    /// </summary>
+    [Fact]
+    public void WatchForCompletion_WhenAnOperatorSuspends_NotifiedWaitingWithTheReasonGiven()
+    {
+        var neverCompletes = new TaskCompletionSource<StepEffect<TestState>>();
+        var actor = CreateActor(nameof(WatchForCompletion_WhenAnOperatorSuspends_NotifiedWaitingWithTheReasonGiven), Script()
+            .Step("SlowStep", (_, _) => neverCompletes.Task)
+            .Command<StartWorkflow>((_, _) => new EffectsBuilder<TestState>().TransitionTo(Step("SlowStep")).ThenReply("accepted")));
+        actor.Tell(new StartWorkflow(1), TestActor);
+        ExpectMsg<string>();
+
+        // Independent observers, same reasoning as WatchForCompletion_NotifiedOnTerminate_TooNotJustEnd
+        // — the watcher and the caller issuing Suspend get their own probes.
+        var watcher = CreateTestProbe();
+        actor.Tell(new WatchForCompletion<TestState>(), watcher.Ref);
+
+        actor.Tell(new Suspend("investigating a data issue"), TestActor);
+        ExpectMsg<Sagant.Protocol.Done>();
+
+        var waiting = Assert.IsType<WorkflowResult<TestState>.Waiting>(
+            watcher.ExpectMsg<WorkflowResult<TestState>>(TimeSpan.FromSeconds(5)));
+        Assert.Equal(WorkflowStatus.Suspended, waiting.Status);
+        Assert.Equal("investigating a data issue", waiting.Reason.Reason);
+        Assert.Equal("SlowStep", waiting.Reason.CurrentStepName);
+    }
+
     [Fact]
     public void WatchForCompletion_RegisteredBeforeEnd_NotifiedWithFinalStateWhenWorkflowEnds()
     {

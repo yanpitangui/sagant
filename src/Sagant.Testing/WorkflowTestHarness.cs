@@ -370,8 +370,8 @@ public sealed class WorkflowTestHarness<TWorkflow, TState>
     /// <see cref="WorkflowCommandException"/> when the workflow isn't in a status it can be
     /// suspended from — the same rejection a caller would see.
     /// </summary>
-    public void Suspend() => ApplyControl(WorkflowTransitionPlanner.PlanSuspend(
-        _envelope, new TransitionCause.Control("Suspend"), _timeProvider.GetUtcNow(), _settings));
+    public void Suspend(string? reason = null) => ApplyControl(WorkflowTransitionPlanner.PlanSuspend(
+        _envelope, new TransitionCause.Control("Suspend"), _timeProvider.GetUtcNow(), _settings, reason));
 
     /// <summary>
     /// Puts a suspended workflow back to work and re-runs its current step from the beginning

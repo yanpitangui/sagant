@@ -212,6 +212,15 @@ A hold — parked, or an operator's `Suspend` — waits for a person indefinitel
 passes, the named step runs and decides what becomes of a hold nobody came back for, the same shape
 as `PauseSettings.WithTimeout`'s timeout handler.
 
+**E13 — A caller waiting is released for any hold, failure behind it or none.**
+`Paused` (a business `ThenPause`) and `Suspended` with no `ParkedFailure` (an operator `Suspend`) both
+release a `RunAndAwaitResult` caller with `WorkflowResult.Waiting`, carrying `WorkflowWaitReason` —
+the free text either was given, the step the run is holding at (`CurrentStepName`, populated for an
+operator hold since `Resume` needs it, `null` for a business pause since there is none), and the
+deadline that releases it on its own, if any. Same reasoning as `Parked`: only a command, an operator,
+or that deadline moves the run forward from here, so a caller has nothing left to gain by waiting
+longer.
+
 ## Children
 
 **H1 — A group's resume step runs exactly once.**

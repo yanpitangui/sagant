@@ -89,6 +89,8 @@ internal sealed class WorkflowHandle<TWorkflow, TState> : IWorkflowHandle<TWorkf
                         (WorkflowResult<TResultState>)new WorkflowResult<TResultState>.Finished(finished.Outcome, state),
                     WorkflowResult<TState>.Parked parked =>
                         new WorkflowResult<TResultState>.Parked(parked.Cause, state),
+                    WorkflowResult<TState>.Waiting waiting =>
+                        new WorkflowResult<TResultState>.Waiting(waiting.Status, waiting.Reason, state),
                     _ => throw new InvalidOperationException(
                         $"Unrecognised {nameof(WorkflowResult<TState>)} case {t.Result.GetType().Name}."),
                 };

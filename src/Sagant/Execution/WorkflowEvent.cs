@@ -126,6 +126,8 @@ public abstract record WorkflowEvent
     /// <param name="HeldAt">The absolute instant this happened, computed at write time — what
     /// <see cref="WorkflowDecision.RecordSuspendedDuration"/> measures against once the instance
     /// leaves <c>Suspended</c>, however it leaves.</param>
+    /// <param name="Reason">The operator's own words for why, from <c>Suspend</c>'s own optional
+    /// argument. <c>null</c> for a hold with none given.</param>
     /// <param name="HoldDeadline">The absolute instant this hold stops waiting, computed at write
     /// time. <c>null</c> for a hold released by a command alone.</param>
     /// <param name="HoldTimeoutStepName">The step run when <paramref name="HoldDeadline"/> passes.
@@ -133,6 +135,7 @@ public abstract record WorkflowEvent
     public sealed record RunSuspended(
         TransitionCause Cause,
         DateTimeOffset HeldAt,
+        string? Reason = null,
         DateTimeOffset? HoldDeadline = null,
         string? HoldTimeoutStepName = null) : CausedEvent(Cause);
 

@@ -951,7 +951,7 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
         // chance to actually stop, beyond simply discarding its eventual result.
         ApplyControlPlan(
             WorkflowTransitionPlanner.PlanSuspend(
-                _envelope, new TransitionCause.Control("Suspend"), _timeProvider.GetUtcNow(), _settings),
+                _envelope, new TransitionCause.Control("Suspend"), _timeProvider.GetUtcNow(), _settings, msg.Reason),
             beforePersist: () =>
         {
             _stepEpoch++;
@@ -1261,10 +1261,20 @@ public sealed class WorkflowEntityActor<TWorkflow, TState> : ReceivePersistentAc
             WorkflowStatus.Deleted => new WorkflowResult<TState>.Finished(
                 _envelope.Outcome ?? new WorkflowOutcome.Terminated("deleted"), _envelope.UserState),
             // Held on a failure, so a caller waiting on this run has nothing left to wait for until
-            // someone acts on it. An operator hold carries no failure and reports nothing, since a
-            // human already knows it is held and decides when it resumes.
+            // someone acts on it.
             WorkflowStatus.Suspended when _envelope.ParkedFailure is { } parked =>
                 new WorkflowResult<TState>.Parked(parked, _envelope.UserState),
+            // Holding on purpose, no failure — a business pause or an operator hold. CurrentStepName
+            // is null for the former (RunPaused clears it) and populated for the latter (RunSuspended
+            // keeps it, for Resume to re-execute), which WorkflowWaitReason surfaces as-is.
+            WorkflowStatus.Paused => new WorkflowResult<TState>.Waiting(
+                WorkflowStatus.Paused,
+                new WorkflowWaitReason(_envelope.Reason, _envelope.CurrentStepName, _envelope.PauseDeadline, _envelope.PauseTimeoutStepName),
+                _envelope.UserState),
+            WorkflowStatus.Suspended => new WorkflowResult<TState>.Waiting(
+                WorkflowStatus.Suspended,
+                new WorkflowWaitReason(_envelope.Reason, _envelope.CurrentStepName, _envelope.HoldDeadline, _envelope.HoldTimeoutStepName),
+                _envelope.UserState),
             _ => null,
         };
 

@@ -302,7 +302,8 @@ public static class WorkflowTransitionPlanner
         WorkflowRuntimeState<TState> envelope,
         TransitionCause cause,
         DateTimeOffset now,
-        ResolvedWorkflowSettings settings)
+        ResolvedWorkflowSettings settings,
+        string? reason = null)
     {
         if (envelope.Status != WorkflowStatus.Running)
         {
@@ -313,6 +314,9 @@ public static class WorkflowTransitionPlanner
         var decisions = new List<WorkflowDecision>
         {
             WorkflowDecision.RecordStatusChange.For(WorkflowStatus.Suspended),
+            // No failure behind an operator hold, so a caller waiting on this run has nothing left to
+            // gain by waiting longer — see WorkflowResult{TState}.Waiting.
+            WorkflowDecision.NotifyCompletionWatchers.Instance,
         };
 
         if (holdDeadline is { } deadline)
@@ -321,7 +325,7 @@ public static class WorkflowTransitionPlanner
         }
 
         return new ControlPlan<TState>.Apply(
-            new WorkflowEvent[] { new WorkflowEvent.RunSuspended(cause, now, holdDeadline, settings.HoldTimeoutStepName) },
+            new WorkflowEvent[] { new WorkflowEvent.RunSuspended(cause, now, reason, holdDeadline, settings.HoldTimeoutStepName) },
             decisions);
     }
 
@@ -601,8 +605,9 @@ public static class WorkflowTransitionPlanner
 
         // A parked run releases its watchers too. It has not ended, but nothing it does next will
         // happen without someone acting on the failure first, so a caller waiting on it has nothing
-        // left to wait for — see WorkflowResult{TState}.Parked.
-        if (next.Status is WorkflowStatus.Finished or WorkflowStatus.Deleted
+        // left to wait for — see WorkflowResult{TState}.Parked. A run that pauses is the same shape
+        // with no failure involved — see WorkflowResult{TState}.Waiting.
+        if (next.Status is WorkflowStatus.Finished or WorkflowStatus.Deleted or WorkflowStatus.Paused
             || transition is Transition.ParkTransition)
         {
             decisions.Add(WorkflowDecision.NotifyCompletionWatchers.Instance);

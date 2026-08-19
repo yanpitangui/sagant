@@ -4,10 +4,13 @@ namespace Sagant.Protocol;
 /// What a caller who ran a workflow and waited gets back: the point at which there is nothing more
 /// for them to wait on, and the state as of then.
 ///
-/// Two ways a wait ends, so this is a closed hierarchy a caller switches over exhaustively. A run
-/// that <see cref="Finished"/> is over. A run that <see cref="Parked"/> is alive and holding, and
-/// resumes only once someone acts on the failure it carries — waiting longer would achieve nothing,
-/// so this comes back the moment that becomes true, without holding the caller to a timeout.
+/// Three ways a wait ends, so this is a closed hierarchy a caller switches over exhaustively. A run
+/// that <see cref="Finished"/> is over. A run that <see cref="Parked"/> is alive and holding on a
+/// failure, and resumes only once someone acts on it — this comes back the moment that becomes true,
+/// releasing the caller as soon as waiting further would achieve nothing. A run that
+/// <see cref="Waiting"/> is alive and holding on purpose, no failure involved — a business pause or an
+/// operator hold — and releases the caller the same way, immediately, however long the hold itself
+/// ends up lasting.
 ///
 /// A failed run comes back as a value: a workflow that could not charge an order is an ordinary
 /// business result the caller decides about, never an exceptional condition in the caller's own
@@ -19,7 +22,7 @@ public abstract record WorkflowResult<TState>
     private WorkflowResult(TState state) => State = state;
 
     /// <summary>The workflow's state as of the transition this result describes. Present either way:
-    /// a failed, terminated or parked run still has whatever state it reached.</summary>
+    /// a failed, terminated, parked or waiting run still has whatever state it reached.</summary>
     public TState State { get; }
 
     /// <summary>Whether the run reached its own successful conclusion.</summary>
@@ -27,7 +30,8 @@ public abstract record WorkflowResult<TState>
 
     /// <summary>
     /// The failure behind this result: why a run failed, or why a parked one is being held.
-    /// <c>null</c> for a run that ended any other way.
+    /// <c>null</c> for a run that ended any other way, including <see cref="Waiting"/> — a hold with
+    /// no failure behind it has nothing here to report.
     /// </summary>
     public WorkflowFailure? Failure => this switch
     {
@@ -62,5 +66,30 @@ public abstract record WorkflowResult<TState>
 
         /// <summary>What stopped the step this run is held at.</summary>
         public WorkflowFailure Cause { get; }
+    }
+
+    /// <summary>
+    /// The run is holding on purpose — <see cref="WorkflowStatus.Paused"/> (a business
+    /// <c>ThenPause</c>) or <see cref="WorkflowStatus.Suspended"/> with no <c>ParkedFailure</c> (an
+    /// operator <c>Suspend</c>) — as opposed to <see cref="Parked"/>, which is <c>Suspended</c>
+    /// specifically because something failed. Both routes here read the same way: nothing went wrong,
+    /// the run is simply waiting for a command, an operator, or its own deadline to pass.
+    /// </summary>
+    public sealed record Waiting : WorkflowResult<TState>
+    {
+        public Waiting(WorkflowStatus status, WorkflowWaitReason reason, TState state)
+            : base(state)
+        {
+            Status = status;
+            Reason = reason;
+        }
+
+        /// <summary><see cref="WorkflowStatus.Paused"/> or <see cref="WorkflowStatus.Suspended"/> —
+        /// carried for completeness; the two read the same way, so most callers have no reason to
+        /// switch on this.</summary>
+        public WorkflowStatus Status { get; }
+
+        /// <summary>Why the run is holding, and what would release it on its own if anything would.</summary>
+        public WorkflowWaitReason Reason { get; }
     }
 }

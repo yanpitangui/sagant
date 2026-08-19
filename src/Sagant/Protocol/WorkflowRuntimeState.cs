@@ -109,6 +109,13 @@ public sealed record WorkflowRuntimeState<TState>(
     /// is measured against — the <c>Suspended</c> counterpart to <see cref="PausedAt"/>.
     /// </summary>
     DateTimeOffset? HeldAt = null,
+    /// <summary>
+    /// The free text a business <c>ThenPause</c> or an operator <c>Suspend</c> was given, whichever
+    /// is why <see cref="Status"/> is currently <c>Paused</c> or <c>Suspended</c>. <c>null</c> when
+    /// neither status applies, or when the one that does was given no reason — cleared the moment the
+    /// instance leaves either status, the same way <see cref="PausedAt"/>/<see cref="HeldAt"/> are.
+    /// </summary>
+    string? Reason = null,
     string? LastTraceParent = null,
     /// <summary>Set while waiting out a <c>RecoverStrategy.BackoffForAttempt</c> delay before a
     /// retry — same "persist an absolute deadline, re-arm a live timer on reactivation" durability
