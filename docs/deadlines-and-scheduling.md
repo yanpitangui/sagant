@@ -112,13 +112,14 @@ builder.WithScheduling(sp, configureShardOptions: o => o.PassivateIdleEntityAfte
 ### Starting one — `StartSchedule`
 
 ```csharp scaffold=statements
+using var startCts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
 var accepted = await client.For<ScheduleWorkflow>("standing-order").Request<StartSchedule, string>(
     StartSchedule.For<OrderFulfillmentWorkflow>(
         spec: new EverySpec(TimeSpan.FromSeconds(15)),
         command: new PlaceOrder(CustomerId: "standing-order-customer", Amount: 42),
         overlap: OverlapPolicy.Skip,
         catchUpWindow: TimeSpan.FromSeconds(30)),
-    timeout: TimeSpan.FromSeconds(90));
+    startCts.Token);
 ```
 
 `StartSchedule.For<TWorkflow>(...)` names the target workflow at compile time, so a mistyped type
@@ -173,8 +174,9 @@ All handled by `ScheduleWorkflow`'s own command handlers, sent the same way any 
 | `GetScheduleStatus` (query) | Returns `ScheduleStatus(Paused, NextFireUtc, FireCount, LastStartedEntityId, SkippedCount)`. |
 
 ```csharp scaffold=statements
+using var statusCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 var status = await client.For<ScheduleWorkflow>("standing-order")
-    .Query<GetScheduleStatus, ScheduleStatus>(new GetScheduleStatus(), TimeSpan.FromSeconds(10));
+    .Query<GetScheduleStatus, ScheduleStatus>(new GetScheduleStatus(), statusCts.Token);
 ```
 
 ## Where to go next

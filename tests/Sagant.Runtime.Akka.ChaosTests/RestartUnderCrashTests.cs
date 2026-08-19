@@ -40,7 +40,7 @@ public class RestartUnderCrashTests
             // Request, whose reply confirms the command reached its handler, so a workflow that never
             // started is distinguishable from one whose history cannot be read.
             var accepted = await first.Client.For<RestartingWorkflow>(entityId)
-                .Request<BeginCycling, string>(new BeginCycling(cycles), TimeSpan.FromSeconds(30));
+                .Request<BeginCycling, string>(new BeginCycling(cycles), new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token);
             Assert.Equal("accepted", accepted);
 
             // Let it get somewhere into the loop. Where exactly is deliberately unpinned — the claim
@@ -141,7 +141,7 @@ public class RestartUnderCrashTests
     /// </summary>
     private static Task<RestartingState> ReadState(ChaosNode node, string entityId) =>
         node.Client.For<RestartingWorkflow>(entityId)
-            .Query<GetCycle, RestartingState>(new GetCycle(), TimeSpan.FromSeconds(15));
+            .Query<GetCycle, RestartingState>(new GetCycle(), new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token);
 
     private static async Task<T> Eventually<T>(
         Func<Task<T>> read, Func<T, bool> until, TimeSpan timeout)

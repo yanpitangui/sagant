@@ -233,6 +233,7 @@ _ = Task.Run(async () =>
         // such answer. A
         // fire-and-forget send would sit buffered behind a shard region still finding its
         // coordinator and report nothing, which reads as a schedule that simply never fires.
+        using var startCts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
         var accepted = await client.For<ScheduleWorkflow>("standing-order").Request<StartSchedule, string>(
             StartSchedule.For<OrderFulfillmentWorkflow>(
                 spec: new EverySpec(TimeSpan.FromSeconds(15)),
@@ -252,13 +253,14 @@ _ = Task.Run(async () =>
                 // A replica down for a while places one order on the way back — the catch-up window
                 // caps it there, well short of the dozens it slept through.
                 catchUpWindow: TimeSpan.FromSeconds(30)),
-            timeout: TimeSpan.FromSeconds(90));
+            startCts.Token);
 
         // Read back — genuinely, never assumed — this says when the first occurrence is actually
         // due, which is the difference between a schedule that is waiting and one that was never
         // started.
+        using var statusCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var status = await client.For<ScheduleWorkflow>("standing-order")
-            .Query<GetScheduleStatus, ScheduleStatus>(new GetScheduleStatus(), TimeSpan.FromSeconds(30));
+            .Query<GetScheduleStatus, ScheduleStatus>(new GetScheduleStatus(), statusCts.Token);
 
         eventLogger.LogInformation(
             "standing order schedule {Accepted}; next occurrence at {NextFire}, fired {FireCount} so far",
@@ -286,8 +288,9 @@ _ = Task.Run(async () =>
         {
             await Task.Delay(TimeSpan.FromSeconds(15), stopping);
 
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             var status = await client.For<ScheduleWorkflow>("standing-order")
-                .Query<GetScheduleStatus, ScheduleStatus>(new GetScheduleStatus(), TimeSpan.FromSeconds(10));
+                .Query<GetScheduleStatus, ScheduleStatus>(new GetScheduleStatus(), cts.Token);
 
             eventLogger.LogInformation(
                 "standing order schedule: fired {FireCount}, skipped {SkippedCount}, next at {NextFire} (now {Now:HH:mm:ss})",

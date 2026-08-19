@@ -36,38 +36,38 @@ internal sealed class WorkflowHandle<TWorkflow, TState> : IWorkflowHandle<TWorkf
         _inner.Send(command, idempotencyKey, metadata);
 
     public Task<TReply> Request<TCommand, TReply>(
-        TCommand command, TimeSpan? timeout = null, CancellationToken cancellationToken = default,
+        TCommand command, CancellationToken cancellationToken = default,
         string? idempotencyKey = null, IReadOnlyDictionary<string, string>? metadata = null)
         where TCommand : notnull =>
-        _inner.Ask<TCommand, TReply>(command, idempotencyKey, timeout, cancellationToken, metadata);
+        _inner.Ask<TCommand, TReply>(command, idempotencyKey, cancellationToken, metadata);
 
-    public Task<TReply> Query<TQuery, TReply>(TQuery query, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+    public Task<TReply> Query<TQuery, TReply>(TQuery query, CancellationToken cancellationToken = default)
         where TQuery : notnull =>
-        _inner.Query<TQuery, TReply>(query, timeout, cancellationToken);
+        _inner.Query<TQuery, TReply>(query, cancellationToken);
 
-    public Task<Done> Suspend(string? reason = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
-        _inner.Suspend(reason, timeout, cancellationToken);
+    public Task<Done> Suspend(string? reason = null, CancellationToken cancellationToken = default) =>
+        _inner.Suspend(reason, cancellationToken);
 
-    public Task<Done> Resume(TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
-        _inner.Resume(timeout, cancellationToken);
+    public Task<Done> Resume(CancellationToken cancellationToken = default) =>
+        _inner.Resume(cancellationToken);
 
-    public Task<Done> Terminate(string? reason = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
-        _inner.Terminate(reason, timeout, cancellationToken);
+    public Task<Done> Terminate(string? reason = null, CancellationToken cancellationToken = default) =>
+        _inner.Terminate(reason, cancellationToken);
 
-    public Task<Done> Cancel(string? reason = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
-        _inner.Cancel(reason, timeout, cancellationToken);
+    public Task<Done> Cancel(string? reason = null, CancellationToken cancellationToken = default) =>
+        _inner.Cancel(reason, cancellationToken);
 
-    public Task<Done> Delete(string? reason = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
-        _inner.Delete(reason, timeout, cancellationToken);
+    public Task<Done> Delete(string? reason = null, CancellationToken cancellationToken = default) =>
+        _inner.Delete(reason, cancellationToken);
 
-    public Task<WorkflowStatus> GetStatus(TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
-        _inner.GetStatus(timeout, cancellationToken);
+    public Task<WorkflowStatus> GetStatus(CancellationToken cancellationToken = default) =>
+        _inner.GetStatus(cancellationToken);
 
-    public Task<Done> Wake(WorkflowTimerKind kind, TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
-        _inner.Wake(kind, timeout, cancellationToken);
+    public Task<Done> Wake(WorkflowTimerKind kind, CancellationToken cancellationToken = default) =>
+        _inner.Wake(kind, cancellationToken);
 
     public Task<WorkflowResult<TResultState>> RunAndAwaitResult<TResultState>(
-        object command, TimeSpan timeout, string? idempotencyKey = null, CancellationToken cancellationToken = default)
+        object command, string? idempotencyKey = null, CancellationToken cancellationToken = default)
     {
         if (typeof(TResultState) != typeof(TState))
         {
@@ -76,7 +76,7 @@ internal sealed class WorkflowHandle<TWorkflow, TState> : IWorkflowHandle<TWorkf
                 $"state type is {typeof(TState).Name} — these must match.");
         }
 
-        return _inner.RunAndAwaitResult(command, timeout, idempotencyKey, cancellationToken).ContinueWith(
+        return _inner.RunAndAwaitResult(command, idempotencyKey, cancellationToken).ContinueWith(
             t =>
             {
                 // Re-wrapped in the caller's own state type, which the guard above has already

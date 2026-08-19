@@ -11,6 +11,15 @@ namespace Sagant.Clients;
 /// compile time and hands back the <see cref="IWorkflowHandle{TWorkflow}"/> form. The non-generic
 /// form here exists for infrastructure that resolves an instance from a type <em>name</em> —
 /// <see cref="IWorkflowClient.For(string, string)"/> — where the type is a runtime value.
+///
+/// Every method here takes a plain <see cref="CancellationToken"/> — a caller wanting a deadline
+/// builds one with <c>new CancellationTokenSource(timeout).Token</c>, the ordinary .NET idiom. That
+/// token bounds only the caller's own local wait for a reply, scoped to this one call. A step's own
+/// <see cref="Sagant.StepContext{TState}.CancellationToken"/> is a completely separate token, scoped
+/// to that step's own execution and its configured <see cref="Sagant.Settings.WorkflowSettings"/>
+/// timeout — a workflow instance is addressable by anyone at any time, so its lifetime was always
+/// independent of whichever caller happens to be watching it right now. Cancelling the token passed
+/// here only ends your own wait — the run keeps going.
 /// </summary>
 public interface IWorkflowHandle
 {
@@ -64,12 +73,11 @@ public interface IWorkflowHandle
     /// remembered, oldest evicted first, so a key resent long after many other commands have gone
     /// through has already aged out of dedup by then.
     /// </param>
-    /// <param name="timeout">How long to wait for the reply before timing out.</param>
     /// <param name="cancellationToken">Cancels waiting for the reply.</param>
     /// <param name="metadata">Caller-supplied context recorded against whatever this command causes.
     /// See <see cref="Send{TCommand}"/> for what it is and what it is unsuited to.</param>
     Task<TReply> Request<TCommand, TReply>(
-        TCommand command, TimeSpan? timeout = null, CancellationToken cancellationToken = default,
+        TCommand command, CancellationToken cancellationToken = default,
         string? idempotencyKey = null, IReadOnlyDictionary<string, string>? metadata = null)
         where TCommand : notnull;
 
@@ -87,16 +95,15 @@ public interface IWorkflowHandle
     /// No <c>idempotencyKey</c>: replaying a read has no side effect to deduplicate.
     /// </summary>
     /// <param name="query">The query to deliver.</param>
-    /// <param name="timeout">How long this caller waits for the reply. Independent of the workflow's
+    /// <param name="cancellationToken">Cancels waiting for the reply. Independent of the workflow's
     /// own <see cref="Sagant.Settings.WorkflowSettings.DefaultQueryTimeout"/>, which is what actually
-    /// bounds the handler — this timeout only ends the wait on this side.</param>
-    /// <param name="cancellationToken">Cancels waiting for the reply.</param>
-    Task<TReply> Query<TQuery, TReply>(TQuery query, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+    /// bounds the handler — this only ends the wait on the caller's side.</param>
+    Task<TReply> Query<TQuery, TReply>(TQuery query, CancellationToken cancellationToken = default)
         where TQuery : notnull;
 
-    Task<Done> Suspend(string? reason = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default);
-    Task<Done> Resume(TimeSpan? timeout = null, CancellationToken cancellationToken = default);
-    Task<Done> Terminate(string? reason = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default);
+    Task<Done> Suspend(string? reason = null, CancellationToken cancellationToken = default);
+    Task<Done> Resume(CancellationToken cancellationToken = default);
+    Task<Done> Terminate(string? reason = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Asks the workflow to stop, letting it unwind first — see <see cref="Sagant.Protocol.Cancel"/>.
@@ -105,14 +112,14 @@ public interface IWorkflowHandle
     ///
     /// Prefer this to <see cref="Terminate"/> for anything a workflow should get to clean up after.
     /// </summary>
-    Task<Done> Cancel(string? reason = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default);
+    Task<Done> Cancel(string? reason = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Force-stops the workflow if still active, then physically purges everything persisted for it
     /// — see <see cref="Sagant.Protocol.Delete"/> for the full contract (works at any
     /// status, cascades to owned children, leaves the id fully reusable).
     /// </summary>
-    Task<Done> Delete(string? reason = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default);
+    Task<Done> Delete(string? reason = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// The engine-level status of this id.
@@ -122,7 +129,7 @@ public interface IWorkflowHandle
     /// Treat that as "no run here", which is what separates an id worth waiting on from one that will
     /// never report anything further.
     /// </summary>
-    Task<WorkflowStatus> GetStatus(TimeSpan? timeout = null, CancellationToken cancellationToken = default);
+    Task<WorkflowStatus> GetStatus(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Activates the instance so it re-arms its own deadlines. Infrastructure calls this when a
@@ -139,10 +146,8 @@ public interface IWorkflowHandle
     /// </summary>
     /// <param name="kind">Which deadline prompted the wake. Recorded for tracing; the instance
     /// re-arms all of its deadlines regardless of which one is named.</param>
-    /// <param name="timeout">How long to wait for the instance to come up.</param>
     /// <param name="cancellationToken">Cancels waiting for the reply.</param>
-    Task<Done> Wake(
-        WorkflowTimerKind kind, TimeSpan? timeout = null, CancellationToken cancellationToken = default);
+    Task<Done> Wake(WorkflowTimerKind kind, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Sends <paramref name="command"/>, then waits for the run to finish and returns how it ended
@@ -158,7 +163,6 @@ public interface IWorkflowHandle
     /// exception three layers down.
     /// </summary>
     /// <param name="command">The command to deliver.</param>
-    /// <param name="timeout">How long to wait for the workflow to reach a terminal status.</param>
     /// <param name="idempotencyKey">
     /// Optional, caller-supplied. Entirely opt-in — omit it and every call is treated as distinct.
     /// If supplied and this workflow instance has already handled a command with the same key, the
@@ -171,7 +175,8 @@ public interface IWorkflowHandle
     /// already aged out of dedup by then.
     /// </param>
     /// <param name="cancellationToken">Cancels waiting for the workflow to complete.</param>
-    Task<WorkflowResult<TState>> RunAndAwaitResult<TState>(object command, TimeSpan timeout, string? idempotencyKey = null, CancellationToken cancellationToken = default);
+    Task<WorkflowResult<TState>> RunAndAwaitResult<TState>(
+        object command, string? idempotencyKey = null, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

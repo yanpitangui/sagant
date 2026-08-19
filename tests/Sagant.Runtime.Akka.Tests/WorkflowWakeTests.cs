@@ -78,7 +78,7 @@ public class WorkflowWakeTests
         {
             var client = host.Services.GetRequiredService<IWorkflowClient>();
             var reply = await client.For<PausingWorkflow>("wake-1")
-                .Request<StartAndWait, string>(new StartAndWait(), TimeSpan.FromSeconds(10));
+                .Request<StartAndWait, string>(new StartAndWait(), new CancellationTokenSource(TimeSpan.FromSeconds(10)).Token);
             Assert.Equal("accepted", reply);
 
             // Long enough for the instance to pause, sit idle past the 1s passivation window, and
@@ -96,7 +96,7 @@ public class WorkflowWakeTests
             // The whole wake protocol: no payload, resolved by type name, and the reply says only
             // that the instance is up.
             var done = await client.For(nameof(PausingWorkflow), "wake-1")
-                .Wake(WorkflowTimerKind.Pause, TimeSpan.FromSeconds(10));
+                .Wake(WorkflowTimerKind.Pause, new CancellationTokenSource(TimeSpan.FromSeconds(10)).Token);
             Assert.Same(Done.Instance, done);
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
@@ -139,7 +139,7 @@ public class WorkflowWakeTests
         {
             var client = host.Services.GetRequiredService<IWorkflowClient>();
             await client.For<PausingWorkflow>("wake-2")
-                .Request<StartAndWait, string>(new StartAndWait(), TimeSpan.FromSeconds(10));
+                .Request<StartAndWait, string>(new StartAndWait(), new CancellationTokenSource(TimeSpan.FromSeconds(10)).Token);
 
             var handle = client.For(nameof(PausingWorkflow), "wake-2");
 
@@ -147,10 +147,10 @@ public class WorkflowWakeTests
             // already up, so each is answered and leaves the instance where it was.
             for (var i = 0; i < 3; i++)
             {
-                Assert.Same(Done.Instance, await handle.Wake(WorkflowTimerKind.Pause, TimeSpan.FromSeconds(10)));
+                Assert.Same(Done.Instance, await handle.Wake(WorkflowTimerKind.Pause, new CancellationTokenSource(TimeSpan.FromSeconds(10)).Token));
             }
 
-            Assert.Equal(WorkflowStatus.Paused, await handle.GetStatus(TimeSpan.FromSeconds(10)));
+            Assert.Equal(WorkflowStatus.Paused, await handle.GetStatus(new CancellationTokenSource(TimeSpan.FromSeconds(10)).Token));
         }
         finally
         {

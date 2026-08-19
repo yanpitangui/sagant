@@ -226,8 +226,9 @@ internal sealed class DeadlineBucketActor : ReceivePersistentActor
                 var (instance, keys) = entry;
                 try
                 {
+                    using var cts = new CancellationTokenSource(_settings.WakeTimeout);
                     await _client.For(instance.WorkflowType, instance.EntityId)
-                        .Wake(instance.Kind, _settings.WakeTimeout);
+                        .Wake(instance.Kind, cts.Token);
                     return (Keys: keys, Ok: true);
                 }
                 catch (Exception ex)

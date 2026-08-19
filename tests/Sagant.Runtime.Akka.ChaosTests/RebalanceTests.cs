@@ -40,7 +40,7 @@ public class RebalanceTests
                 clusterName, _postgres.ConnectionString, cycles, seed: seed.Address);
 
             var accepted = await joiner.Client.For<RestartingWorkflow>(entityId)
-                .Request<BeginCycling, string>(new BeginCycling(cycles), TimeSpan.FromSeconds(30));
+                .Request<BeginCycling, string>(new BeginCycling(cycles), new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token);
             Assert.Equal("accepted", accepted);
 
             var before = await Eventually(
@@ -79,7 +79,7 @@ public class RebalanceTests
         try
         {
             var state = await node.Client.For<RestartingWorkflow>(entityId)
-                .Query<GetCycle, RestartingState>(new GetCycle(), TimeSpan.FromSeconds(15));
+                .Query<GetCycle, RestartingState>(new GetCycle(), new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token);
             return state.Cycle;
         }
         catch (Exception)

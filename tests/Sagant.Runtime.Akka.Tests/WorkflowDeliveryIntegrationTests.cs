@@ -119,7 +119,7 @@ public class WorkflowDeliveryIntegrationTests
 
             await handle.Request<DeliveryEchoPing, string>(
                 new DeliveryEchoPing("hello"),
-                TimeSpan.FromSeconds(15),
+                new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token,
                 metadata: new Dictionary<string, string> { ["user"] = "operator-7", ["correlation"] = "abc-123" });
 
             var caused = Support.RecordingJournal.EventsFor("DeliveryEchoWorkflow-echo-meta-1")
@@ -146,13 +146,13 @@ public class WorkflowDeliveryIntegrationTests
         {
             var handle = client.For<DeliveryEchoWorkflow>("echo-idem-1");
 
-            var reply1 = await handle.Request<DeliveryEchoPing, string>(new DeliveryEchoPing("hello"), TimeSpan.FromSeconds(15), idempotencyKey: "key-1");
-            var reply2 = await handle.Request<DeliveryEchoPing, string>(new DeliveryEchoPing("hello-again"), TimeSpan.FromSeconds(15), idempotencyKey: "key-1");
+            var reply1 = await handle.Request<DeliveryEchoPing, string>(new DeliveryEchoPing("hello"), new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token, idempotencyKey: "key-1");
+            var reply2 = await handle.Request<DeliveryEchoPing, string>(new DeliveryEchoPing("hello-again"), new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token, idempotencyKey: "key-1");
 
             Assert.Equal("accepted:hello", reply1);
             Assert.Equal(reply1, reply2); // replayed the cached "accepted:hello" reply, never re-invoking the handler for "accepted:hello-again"
 
-            var status = await handle.GetStatus(TimeSpan.FromSeconds(15));
+            var status = await handle.GetStatus(new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token);
             Assert.Equal(WorkflowStatus.Finished, status); // the EchoStep transition from the first Request has landed; also proves the entity answers control commands as well as business ones
         }
         finally
@@ -204,14 +204,14 @@ public class WorkflowDeliveryIntegrationTests
             var client = host.Services.GetRequiredService<IWorkflowClient>();
             var handle = client.For<DeliveryEchoWorkflow>("echo-restart-1");
 
-            var reply1 = await handle.Request<DeliveryEchoPing, string>(new DeliveryEchoPing("hello"), TimeSpan.FromSeconds(15), idempotencyKey: "restart-key-1");
+            var reply1 = await handle.Request<DeliveryEchoPing, string>(new DeliveryEchoPing("hello"), new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token, idempotencyKey: "restart-key-1");
             Assert.Equal("accepted:hello", reply1);
 
             // Sit idle well past the 2s PassivateIdleEntityAfter (plus the up-to-1s tick granularity)
             // so the entity actor is actually stopped before the next message.
             await Task.Delay(TimeSpan.FromSeconds(6));
 
-            var reply2 = await handle.Request<DeliveryEchoPing, string>(new DeliveryEchoPing("hello-again"), TimeSpan.FromSeconds(15), idempotencyKey: "restart-key-1");
+            var reply2 = await handle.Request<DeliveryEchoPing, string>(new DeliveryEchoPing("hello-again"), new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token, idempotencyKey: "restart-key-1");
 
             Assert.Equal(reply1, reply2); // recovered ledger still replays "accepted:hello" after a real actor stop/restart, with the handler left uninvoked
         }

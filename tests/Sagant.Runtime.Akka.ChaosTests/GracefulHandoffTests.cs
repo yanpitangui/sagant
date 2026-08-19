@@ -35,7 +35,7 @@ public class GracefulHandoffTests
             slowStepDuration: TimeSpan.FromSeconds(3));
 
         var accepted = await node.Client.For<SlowStepWorkflow>(entityId)
-            .Request<BeginSlowWork, string>(new BeginSlowWork(3000), TimeSpan.FromSeconds(30));
+            .Request<BeginSlowWork, string>(new BeginSlowWork(3000), new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token);
         Assert.Equal("accepted", accepted);
 
         // Well inside the step's own duration, so the shutdown lands while it is genuinely running.

@@ -65,12 +65,20 @@ services.AddAkka("my-system", builder => builder
 ```csharp scaffold=file
 public sealed class GreetingService(IWorkflowClient client)
 {
-    public ValueTask GreetAsync(string id, string name) =>
-        client.For<GreetingWorkflow>(id).Send(new Greet(name));
+    public async Task<string> GreetAsync(string id, string name)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var result = await client.For<GreetingWorkflow>(id)
+            .RunAndAwaitResult<GreetingState>(new Greet(name), cancellationToken: cts.Token);
+
+        return result.State.Greeting!;
+    }
 }
 ```
 
-That's a complete, runnable workflow — define, register, drive. `IWorkflowClient`/
+`RunAndAwaitResult` sends the command, waits for the run to reach a terminal status, and returns
+its final state — the caller gets the actual greeting back. That's a complete, runnable workflow —
+define, register, drive. `IWorkflowClient`/
 `IWorkflowHandle<TWorkflow>` are the full public surface a caller ever touches: no `IActorRef`,
 `ActorRegistry`, or `ClusterSharding` type leaks into application code.
 
@@ -135,9 +143,12 @@ Driving it looks the same too, just with a typed reply this time:
 ```csharp scaffold=file
 public sealed class OrderPlacementService(IWorkflowClient client)
 {
-    public Task<string> PlaceAsync(string orderId, int amount) =>
-        client.For<OrderFulfillmentWorkflow>(orderId)
-            .Request<PlaceOrder, string>(new PlaceOrder(amount), TimeSpan.FromSeconds(10));
+    public async Task<string> PlaceAsync(string orderId, int amount)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        return await client.For<OrderFulfillmentWorkflow>(orderId)
+            .Request<PlaceOrder, string>(new PlaceOrder(amount), cts.Token);
+    }
 }
 ```
 
@@ -184,8 +195,9 @@ Three verbs on a handle, between the two you've already seen: `Send` mutates wit
 `Query` observes:
 
 ```csharp scaffold=statements
+using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 var status = await client.For<OrderFulfillmentWorkflow>(orderId)
-    .Query<GetProgress, OrderStatus>(new GetProgress(), TimeSpan.FromSeconds(5));
+    .Query<GetProgress, OrderStatus>(new GetProgress(), cts.Token);
 ```
 
 A query takes a different route from a command — delivered directly, bypassing the at-least-once

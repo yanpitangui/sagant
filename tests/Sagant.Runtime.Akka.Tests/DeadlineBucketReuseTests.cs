@@ -35,7 +35,7 @@ public class DeadlineBucketReuseTests : TestKit
         {
             public string EntityId => entityId;
 
-            public Task<Done> Wake(WorkflowTimerKind kind, TimeSpan? timeout = null, CancellationToken ct = default) =>
+            public Task<Done> Wake(WorkflowTimerKind kind, CancellationToken ct = default) =>
                 Task.FromResult(Done.Instance);
 
             public ValueTask Send<TCommand>(
@@ -43,35 +43,34 @@ public class DeadlineBucketReuseTests : TestKit
                 IReadOnlyDictionary<string, string>? metadata = null) where TCommand : notnull =>
                 throw new NotSupportedException();
 
-            public Task<WorkflowStatus> GetStatus(TimeSpan? timeout = null, CancellationToken ct = default) =>
+            public Task<WorkflowStatus> GetStatus(CancellationToken ct = default) =>
                 throw new NotSupportedException();
 
             public Task<TReply> Request<TCommand, TReply>(
-                TCommand command, TimeSpan? timeout = null, CancellationToken cancellationToken = default,
+                TCommand command, CancellationToken cancellationToken = default,
                 string? idempotencyKey = null, IReadOnlyDictionary<string, string>? metadata = null)
                 where TCommand : notnull => throw new NotSupportedException();
 
-            public Task<TReply> Query<TQuery, TReply>(
-                TQuery query, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+            public Task<TReply> Query<TQuery, TReply>(TQuery query, CancellationToken cancellationToken = default)
                 where TQuery : notnull => throw new NotSupportedException();
 
-            public Task<Done> Suspend(string? reason = null, TimeSpan? t = null, CancellationToken ct = default) =>
+            public Task<Done> Suspend(string? reason = null, CancellationToken ct = default) =>
                 throw new NotSupportedException();
 
-            public Task<Done> Resume(TimeSpan? t = null, CancellationToken ct = default) =>
+            public Task<Done> Resume(CancellationToken ct = default) =>
                 throw new NotSupportedException();
 
-            public Task<Done> Terminate(string? reason = null, TimeSpan? t = null, CancellationToken ct = default) =>
+            public Task<Done> Terminate(string? reason = null, CancellationToken ct = default) =>
                 throw new NotSupportedException();
 
-            public Task<Done> Cancel(string? reason = null, TimeSpan? t = null, CancellationToken ct = default) =>
+            public Task<Done> Cancel(string? reason = null, CancellationToken ct = default) =>
                 throw new NotSupportedException();
 
-            public Task<Done> Delete(string? reason = null, TimeSpan? t = null, CancellationToken ct = default) =>
+            public Task<Done> Delete(string? reason = null, CancellationToken ct = default) =>
                 throw new NotSupportedException();
 
             public Task<WorkflowResult<TState>> RunAndAwaitResult<TState>(
-                object command, TimeSpan timeout, string? idempotencyKey = null, CancellationToken ct = default) =>
+                object command, string? idempotencyKey = null, CancellationToken ct = default) =>
                 throw new NotSupportedException();
         }
     }

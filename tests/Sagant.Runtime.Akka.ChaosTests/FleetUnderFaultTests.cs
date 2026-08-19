@@ -47,7 +47,7 @@ public class FleetUnderFaultTests
             // puts instances at different points in their lives when the fault lands.
             await Task.WhenAll(ids.Select(id =>
                 seed.Client.For<RestartingWorkflow>(id)
-                    .Request<BeginCycling, string>(new BeginCycling(cycles), TimeSpan.FromSeconds(45))));
+                    .Request<BeginCycling, string>(new BeginCycling(cycles), new CancellationTokenSource(TimeSpan.FromSeconds(45)).Token)));
 
             // Long enough for the fleet to be genuinely mid-flight — some cycling, some settled —
             // without waiting for all of it, which would leave nothing to interrupt.
@@ -111,7 +111,7 @@ public class FleetUnderFaultTests
         try
         {
             var state = await node.Client.For<RestartingWorkflow>(entityId)
-                .Query<GetCycle, RestartingState>(new GetCycle(), TimeSpan.FromSeconds(20));
+                .Query<GetCycle, RestartingState>(new GetCycle(), new CancellationTokenSource(TimeSpan.FromSeconds(20)).Token);
             return state.Cycle;
         }
         catch (Exception)

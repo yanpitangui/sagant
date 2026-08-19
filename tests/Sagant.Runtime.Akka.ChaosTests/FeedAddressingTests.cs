@@ -37,7 +37,7 @@ public class FeedAddressingTests
             "feed-addressing", _postgres.ConnectionString, cycles: 1);
 
         var accepted = await node.Client.For<RestartingWorkflow>(entityId)
-            .Request<BeginCycling, string>(new BeginCycling(1), TimeSpan.FromSeconds(30));
+            .Request<BeginCycling, string>(new BeginCycling(1), new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token);
         Assert.Equal("accepted", accepted);
 
         var items = await Eventually(

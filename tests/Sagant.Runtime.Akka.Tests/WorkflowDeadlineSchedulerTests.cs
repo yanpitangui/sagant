@@ -57,7 +57,7 @@ public class WorkflowDeadlineSchedulerTests
         {
             var client = host.Services.GetRequiredService<IWorkflowClient>();
             await client.For<SleepingWorkflow>("sleeper-1")
-                .Request<StartSleeping, string>(new StartSleeping(), TimeSpan.FromSeconds(10));
+                .Request<StartSleeping, string>(new StartSleeping(), new CancellationTokenSource(TimeSpan.FromSeconds(10)).Token);
 
             var visibility = JournalWorkflowVisibilityQuery.For(system, InMemoryReadJournal.Identifier);
 
@@ -113,7 +113,7 @@ public class WorkflowDeadlineSchedulerTests
         {
             var client = host.Services.GetRequiredService<IWorkflowClient>();
             await client.For<SleepingWorkflow>("sleeper-2")
-                .Request<StartSleeping, string>(new StartSleeping(), TimeSpan.FromSeconds(10));
+                .Request<StartSleeping, string>(new StartSleeping(), new CancellationTokenSource(TimeSpan.FromSeconds(10)).Token);
 
             // Long enough for the pause to be written and the projection to have read it.
             await Task.Delay(TimeSpan.FromSeconds(3));

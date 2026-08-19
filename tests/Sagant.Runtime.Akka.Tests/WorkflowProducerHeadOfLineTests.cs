@@ -115,7 +115,7 @@ public class WorkflowProducerHeadOfLineTests
             // First entity: enters a step that stays in flight until the gate opens.
             var stalled = client.For<StallingWorkflow>("stalled");
             Assert.Equal("stalling", await stalled.Request<StallCommand, string>(
-                new StallCommand(gate), timeout: TimeSpan.FromSeconds(30)));
+                new StallCommand(gate), cancellationToken: new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token));
 
             // A command arriving while that step runs is stashed and left unconfirmed, which is the
             // state everything below is measured against.
@@ -125,7 +125,7 @@ public class WorkflowProducerHeadOfLineTests
             // carry it.
             var other = client.For<StallingWorkflow>("other");
             var reply = await other.Request<PingCommand, string>(
-                new PingCommand("hello"), timeout: TimeSpan.FromSeconds(15));
+                new PingCommand("hello"), cancellationToken: new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token);
 
             Assert.Equal("pong:hello", reply);
         }

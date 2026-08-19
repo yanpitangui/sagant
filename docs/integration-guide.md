@@ -69,9 +69,12 @@ ever touch — no `IActorRef`, `ActorRegistry`, or `ClusterSharding` type leaks 
 ```csharp scaffold=file
 public sealed class OrderPlacementService(IWorkflowClient client)
 {
-    public Task<string> PlaceAsync(string orderId, int amount) =>
-        client.For<OrderFulfillmentWorkflow>(orderId)
-            .Request<PlaceOrder, string>(new PlaceOrder(amount), TimeSpan.FromSeconds(10));
+    public async Task<string> PlaceAsync(string orderId, int amount)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        return await client.For<OrderFulfillmentWorkflow>(orderId)
+            .Request<PlaceOrder, string>(new PlaceOrder(amount), cts.Token);
+    }
 }
 ```
 

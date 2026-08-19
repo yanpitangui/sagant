@@ -84,7 +84,7 @@ public class WorkflowPassivationIntegrationTests
             var handle = host.Services.GetRequiredService<IWorkflowClient>().For<SlowStepWorkflow>("slow-1");
 
             var result = await handle.RunAndAwaitResult<SlowWorkState>(
-                new StartSlowWork(), TimeSpan.FromSeconds(30));
+                new StartSlowWork(), cancellationToken: new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token);
 
             var finished = Assert.IsType<WorkflowResult<SlowWorkState>.Finished>(result);
             Assert.IsType<WorkflowOutcome.Completed>(finished.Outcome);

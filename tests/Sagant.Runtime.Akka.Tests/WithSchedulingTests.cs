@@ -46,13 +46,13 @@ public class WithSchedulingTests
                 .Request<StartSchedule, string>(
                     StartSchedule.For<ScheduleWorkflow>(
                         new EverySpec(TimeSpan.FromHours(1)), new Noop()),
-                    TimeSpan.FromSeconds(15));
+                    new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token);
 
             Assert.Equal("scheduled", reply);
 
             // Waiting for its first occurrence, which is what a schedule spends its life doing.
             var status = await client.For<ScheduleWorkflow>("every-hour")
-                .Query<GetScheduleStatus, ScheduleStatus>(new GetScheduleStatus(), TimeSpan.FromSeconds(15));
+                .Query<GetScheduleStatus, ScheduleStatus>(new GetScheduleStatus(), new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token);
 
             Assert.False(status.Paused);
             Assert.NotNull(status.NextFireUtc);

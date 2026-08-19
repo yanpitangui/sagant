@@ -82,7 +82,7 @@ public class WorkflowEventPubSubBridgeTests
 
             var client = host.Services.GetRequiredService<IWorkflowClient>();
             var reply = await client.For<EchoWorkflow>("pubsub-bridge-1")
-                .Request<EchoPing, string>(new EchoPing("hello"), TimeSpan.FromSeconds(15));
+                .Request<EchoPing, string>(new EchoPing("hello"), new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token);
             Assert.Equal("accepted", reply);
 
             var notification = await received.Task.WaitAsync(TimeSpan.FromSeconds(10));

@@ -43,7 +43,7 @@ public class WorkflowClientTests
             var client = host.Services.GetRequiredService<IWorkflowClient>();
             var handle = client.For<EchoWorkflow>("echo-1");
 
-            var reply = await handle.Request<EchoPing, string>(new EchoPing("hello"), TimeSpan.FromSeconds(15));
+            var reply = await handle.Request<EchoPing, string>(new EchoPing("hello"), new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token);
 
             Assert.Equal("accepted", reply);
         }

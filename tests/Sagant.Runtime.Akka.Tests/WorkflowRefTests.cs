@@ -125,7 +125,7 @@ public class WorkflowRefTests : TestKit
         var producerAdapterProbe = CreateTestProbe();
         var workflowRef = new WorkflowRef<StubWorkflow, string>(shardRegionProbe.Ref, producerAdapterProbe.Ref, "order-42");
 
-        var askTask = workflowRef.Ask<SomeCommand, string>(new SomeCommand(2), timeout: TimeSpan.FromSeconds(5));
+        var askTask = workflowRef.Ask<SomeCommand, string>(new SomeCommand(2));
 
         var waiterRef = AnswerCreateReplyWaiter(producerAdapterProbe); // 1st round trip: create the reply waiter
 
@@ -144,15 +144,13 @@ public class WorkflowRefTests : TestKit
     [Fact]
     public async Task Ask_WithIdempotencyKey_CarriesKeyOnEnvelope()
     {
-        // Locks down WorkflowRef.Ask's parameter order — (command, idempotencyKey, timeout,
-        // cancellationToken), matching IWorkflowHandle.Request's public order — since the
-        // TimeSpan?/string? type mismatch that would otherwise catch an accidental swap at compile
-        // time disappears the moment a second string? parameter is added anywhere in this chain.
+        // Locks down WorkflowRef.Ask's parameter order — (command, idempotencyKey,
+        // cancellationToken, metadata), matching IWorkflowHandle.Request's public order.
         var shardRegionProbe = CreateTestProbe();
         var producerAdapterProbe = CreateTestProbe();
         var workflowRef = new WorkflowRef<StubWorkflow, string>(shardRegionProbe.Ref, producerAdapterProbe.Ref, "order-42");
 
-        var askTask = workflowRef.Ask<SomeCommand, string>(new SomeCommand(2), idempotencyKey: "key-x", timeout: TimeSpan.FromSeconds(5));
+        var askTask = workflowRef.Ask<SomeCommand, string>(new SomeCommand(2), idempotencyKey: "key-x");
 
         AnswerCreateReplyWaiter(producerAdapterProbe);
 
@@ -168,18 +166,15 @@ public class WorkflowRefTests : TestKit
     public async Task WorkflowHandle_Request_WithIdempotencyKey_CarriesKeyOnEnvelope()
     {
         // Same lock-down as Ask_WithIdempotencyKey_CarriesKeyOnEnvelope, but through the public-facing
-        // WorkflowHandle.Request -> WorkflowRef.Ask chain — Request's own parameter order
-        // (command, idempotencyKey, timeout, cancellationToken) differs textually from Ask's
-        // (also (command, idempotencyKey, timeout, cancellationToken) since the item-2 reorder, but
-        // WorkflowClient.Request's call into _inner.Ask is what this actually exercises), so this
-        // catches a regression at the handle boundary app code actually calls through, going beyond
-        // WorkflowRef alone.
+        // WorkflowHandle.Request -> WorkflowRef.Ask chain — WorkflowClient.Request's call into
+        // _inner.Ask is what this actually exercises, so this catches a regression at the handle
+        // boundary app code actually calls through, going beyond WorkflowRef alone.
         var shardRegionProbe = CreateTestProbe();
         var producerAdapterProbe = CreateTestProbe();
         var workflowRef = new WorkflowRef<StubWorkflow, string>(shardRegionProbe.Ref, producerAdapterProbe.Ref, "order-42");
         var handle = new WorkflowHandle<StubWorkflow, string>(workflowRef);
 
-        var requestTask = handle.Request<SomeCommand, string>(new SomeCommand(2), TimeSpan.FromSeconds(5), idempotencyKey: "key-y");
+        var requestTask = handle.Request<SomeCommand, string>(new SomeCommand(2), idempotencyKey: "key-y");
 
         AnswerCreateReplyWaiter(producerAdapterProbe);
 
@@ -200,7 +195,7 @@ public class WorkflowRefTests : TestKit
         var producerAdapterProbe = CreateTestProbe();
         var workflowRef = new WorkflowRef<StubWorkflow, string>(shardRegionProbe.Ref, producerAdapterProbe.Ref, "order-42");
 
-        var askTask = workflowRef.Ask<SomeCommand, string>(new SomeCommand(2), timeout: TimeSpan.FromSeconds(5));
+        var askTask = workflowRef.Ask<SomeCommand, string>(new SomeCommand(2));
 
         AnswerCreateReplyWaiter(producerAdapterProbe);
 
@@ -222,7 +217,7 @@ public class WorkflowRefTests : TestKit
         var producerAdapterProbe = CreateTestProbe();
         var workflowRef = new WorkflowRef<StubWorkflow, string>(shardRegionProbe.Ref, producerAdapterProbe.Ref, "order-42");
 
-        var askTask = workflowRef.Ask<SomeCommand, string>(new SomeCommand(2), timeout: TimeSpan.FromSeconds(5));
+        var askTask = workflowRef.Ask<SomeCommand, string>(new SomeCommand(2));
 
         AnswerCreateReplyWaiter(producerAdapterProbe);
 
@@ -241,7 +236,7 @@ public class WorkflowRefTests : TestKit
         var producerAdapterProbe = CreateTestProbe();
         var workflowRef = new WorkflowRef<StubWorkflow, string>(shardRegionProbe.Ref, producerAdapterProbe.Ref, "order-42");
 
-        var task = workflowRef.Suspend("because", TimeSpan.FromSeconds(5));
+        var task = workflowRef.Suspend("because");
 
         var envelope = shardRegionProbe.ExpectMsg<WorkflowEnvelope>();
         var suspend = Assert.IsType<Suspend>(envelope.Message);
@@ -259,7 +254,7 @@ public class WorkflowRefTests : TestKit
         var producerAdapterProbe = CreateTestProbe();
         var workflowRef = new WorkflowRef<StubWorkflow, string>(shardRegionProbe.Ref, producerAdapterProbe.Ref, "order-42");
 
-        var task = workflowRef.Resume(TimeSpan.FromSeconds(5));
+        var task = workflowRef.Resume();
 
         var envelope = shardRegionProbe.ExpectMsg<WorkflowEnvelope>();
         Assert.IsType<Resume>(envelope.Message);
@@ -276,7 +271,7 @@ public class WorkflowRefTests : TestKit
         var producerAdapterProbe = CreateTestProbe();
         var workflowRef = new WorkflowRef<StubWorkflow, string>(shardRegionProbe.Ref, producerAdapterProbe.Ref, "order-42");
 
-        var task = workflowRef.Terminate("because", TimeSpan.FromSeconds(5));
+        var task = workflowRef.Terminate("because");
 
         var envelope = shardRegionProbe.ExpectMsg<WorkflowEnvelope>();
         var terminate = Assert.IsType<Terminate>(envelope.Message);
@@ -294,7 +289,7 @@ public class WorkflowRefTests : TestKit
         var producerAdapterProbe = CreateTestProbe();
         var workflowRef = new WorkflowRef<StubWorkflow, string>(shardRegionProbe.Ref, producerAdapterProbe.Ref, "order-42");
 
-        var task = workflowRef.GetStatus(TimeSpan.FromSeconds(5));
+        var task = workflowRef.GetStatus();
 
         var envelope = shardRegionProbe.ExpectMsg<WorkflowEnvelope>();
         Assert.IsType<GetStatus>(envelope.Message);
@@ -311,7 +306,7 @@ public class WorkflowRefTests : TestKit
         var producerAdapterProbe = CreateTestProbe();
         var workflowRef = new WorkflowRef<StubWorkflow, string>(shardRegionProbe.Ref, producerAdapterProbe.Ref, "order-42");
 
-        var resultTask = workflowRef.RunAndAwaitResult(new SomeCommand(3), TimeSpan.FromSeconds(5));
+        var resultTask = workflowRef.RunAndAwaitResult(new SomeCommand(3));
 
         var enqueue = producerAdapterProbe.ExpectMsg<WorkflowProducerAdapter.Enqueue>();
         Assert.Equal("order-42", enqueue.EntityId);

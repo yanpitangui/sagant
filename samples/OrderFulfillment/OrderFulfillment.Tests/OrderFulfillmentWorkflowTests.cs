@@ -59,7 +59,7 @@ public class OrderFulfillmentWorkflowTests : Akka.TestKit.Xunit2.TestKit
         using var cts = new CancellationTokenSource(timeout);
         while (true)
         {
-            var state = await workflow.Query<GetOrderState, OrderState>(new GetOrderState(), TimeSpan.FromSeconds(5));
+            var state = await workflow.Query<GetOrderState, OrderState>(new GetOrderState(), new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
             if (state.Status == status)
             {
                 return state;
@@ -81,7 +81,7 @@ public class OrderFulfillmentWorkflowTests : Akka.TestKit.Xunit2.TestKit
         var workflow = harness.Ref("order-1");
 
         var items = new[] { new OrderLineItem("order-1#item-0", 300), new OrderLineItem("order-1#item-1", 200) };
-        var accepted = await workflow.Request<PlaceOrder, string>(new PlaceOrder("cust-1", items, "1 Main St"), TimeSpan.FromSeconds(5));
+        var accepted = await workflow.Request<PlaceOrder, string>(new PlaceOrder("cust-1", items, "1 Main St"), new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
         Assert.Equal("accepted", accepted);
 
         var final = await AwaitStatusAsync(workflow, OrderStatus.Succeeded, TimeSpan.FromSeconds(10));
@@ -128,7 +128,7 @@ public class OrderFulfillmentWorkflowTests : Akka.TestKit.Xunit2.TestKit
         var workflow = harness.Ref("order-2");
 
         var items = new[] { new OrderLineItem("order-2#item-0", 500) };
-        await workflow.Request<PlaceOrder, string>(new PlaceOrder("cust-2", items, "1 Main St"), TimeSpan.FromSeconds(5));
+        await workflow.Request<PlaceOrder, string>(new PlaceOrder("cust-2", items, "1 Main St"), new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
 
         var final = await AwaitStatusAsync(workflow, OrderStatus.Failed, TimeSpan.FromSeconds(10));
 
@@ -154,7 +154,7 @@ public class OrderFulfillmentWorkflowTests : Akka.TestKit.Xunit2.TestKit
         var workflow = harness.Ref("order-3");
 
         var items = new[] { new OrderLineItem("order-3#item-0", 300), new OrderLineItem("order-3#item-1", 200) };
-        await workflow.Request<PlaceOrder, string>(new PlaceOrder("cust-3", items, "1 Main St"), TimeSpan.FromSeconds(5));
+        await workflow.Request<PlaceOrder, string>(new PlaceOrder("cust-3", items, "1 Main St"), new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
 
         var final = await AwaitStatusAsync(workflow, OrderStatus.Failed, TimeSpan.FromSeconds(15));
 
@@ -174,7 +174,7 @@ public class OrderFulfillmentWorkflowTests : Akka.TestKit.Xunit2.TestKit
         var workflow = harness.Ref("order-4");
 
         var items = new[] { new OrderLineItem("order-4#item-0", 500) };
-        await workflow.Request<PlaceOrder, string>(new PlaceOrder("cust-4", items, "1 Main St"), TimeSpan.FromSeconds(5));
+        await workflow.Request<PlaceOrder, string>(new PlaceOrder("cust-4", items, "1 Main St"), new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
 
         var final = await AwaitStatusAsync(workflow, OrderStatus.Succeeded, TimeSpan.FromSeconds(5));
 
@@ -193,18 +193,18 @@ public class OrderFulfillmentWorkflowTests : Akka.TestKit.Xunit2.TestKit
         var workflow = harness.Ref("order-5");
 
         var items = new[] { new OrderLineItem("order-5#item-0", OrderFulfillmentWorkflow.ApprovalThreshold + 1) };
-        await workflow.Request<PlaceOrder, string>(new PlaceOrder("cust-5", items, "1 Main St"), TimeSpan.FromSeconds(5));
+        await workflow.Request<PlaceOrder, string>(new PlaceOrder("cust-5", items, "1 Main St"), new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
 
         using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
         {
-            while (await workflow.GetStatus(TimeSpan.FromSeconds(5)) != WorkflowStatus.Paused)
+            while (await workflow.GetStatus(new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token) != WorkflowStatus.Paused)
             {
                 cts.Token.ThrowIfCancellationRequested();
                 await Task.Delay(50, cts.Token);
             }
         }
 
-        var approved = await workflow.Request<ApproveOrder, string>(new ApproveOrder(), TimeSpan.FromSeconds(5));
+        var approved = await workflow.Request<ApproveOrder, string>(new ApproveOrder(), new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
         Assert.Equal("approved", approved);
 
         var final = await AwaitStatusAsync(workflow, OrderStatus.Succeeded, TimeSpan.FromSeconds(5));
@@ -228,7 +228,7 @@ public class OrderFulfillmentWorkflowTests : Akka.TestKit.Xunit2.TestKit
         var workflow = harness.Ref("order-cancel");
 
         var items = new[] { new OrderLineItem("order-cancel#item-0", 100) };
-        await workflow.Request<PlaceOrder, string>(new PlaceOrder("cust-cancel", items, "1 Main St"), TimeSpan.FromSeconds(5));
+        await workflow.Request<PlaceOrder, string>(new PlaceOrder("cust-cancel", items, "1 Main St"), new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
 
         // Wait until the charge has actually happened, so cancelling has something to unwind. The
         // budget covers a shared runner running every one of this class's clusters at once, where
@@ -242,7 +242,7 @@ public class OrderFulfillmentWorkflowTests : Akka.TestKit.Xunit2.TestKit
             }
         }
 
-        await workflow.Cancel("customer changed their mind", TimeSpan.FromSeconds(5));
+        await workflow.Cancel("customer changed their mind", new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
 
         var final = await AwaitStatusAsync(workflow, OrderStatus.Cancelled, TimeSpan.FromSeconds(30));
         Assert.Equal(OrderStatus.Cancelled, final.Status);
@@ -299,7 +299,7 @@ public class OrderFulfillmentWorkflowTests : Akka.TestKit.Xunit2.TestKit
         await workflow.Request<PlaceOrder, string>(
             new PlaceOrder("cust-fault-1", items, "1 Main St",
                 FaultStep: nameof(OrderFulfillmentWorkflow.ChargePaymentStep), FaultPermanent: true),
-            timeout: TimeSpan.FromSeconds(5));
+            new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
 
         var final = await AwaitStatusAsync(workflow, OrderStatus.Failed, TimeSpan.FromSeconds(10));
 
@@ -322,7 +322,7 @@ public class OrderFulfillmentWorkflowTests : Akka.TestKit.Xunit2.TestKit
         await workflow.Request<PlaceOrder, string>(
             new PlaceOrder("cust-fault-2", items, "1 Main St",
                 FaultStep: nameof(OrderFulfillmentWorkflow.ChargePaymentStep), FaultPermanent: false),
-            timeout: TimeSpan.FromSeconds(5));
+            new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
 
         var final = await AwaitStatusAsync(workflow, OrderStatus.Succeeded, TimeSpan.FromSeconds(10));
 
@@ -349,7 +349,7 @@ public class OrderFulfillmentWorkflowTests : Akka.TestKit.Xunit2.TestKit
         var itemId = "order-delete#item-0";
 
         var items = new[] { new OrderLineItem(itemId, 500) };
-        await workflow.Request<PlaceOrder, string>(new PlaceOrder("cust-delete", items, "1 Main St"), TimeSpan.FromSeconds(5));
+        await workflow.Request<PlaceOrder, string>(new PlaceOrder("cust-delete", items, "1 Main St"), new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
         await AwaitStatusAsync(workflow, OrderStatus.Succeeded, TimeSpan.FromSeconds(10));
 
         // Succeeds without throwing — a subsequent GetStatus against this same id isn't a reliable
@@ -357,7 +357,7 @@ public class OrderFulfillmentWorkflowTests : Akka.TestKit.Xunit2.TestKit
         // EmptyState entity (ClusterSharding has no persistent "this id is gone forever" concept),
         // exactly why the sample's own read model tombstones a deleted order in Postgres, so it never
         // has to query the live entity again after a delete (see OrderReadModelRepository.SoftDeleteAsync).
-        await workflow.Delete(timeout: TimeSpan.FromSeconds(5));
+        await workflow.Delete(cancellationToken: new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
 
         // The item itself already ended Completed (ChildStatus, per FulfillItemsStep's own doc
         // comment) well before the order was deleted — ParentClosePolicy.Terminate only ever acts on
@@ -365,6 +365,6 @@ public class OrderFulfillmentWorkflowTests : Akka.TestKit.Xunit2.TestKit
         // reachable and still Completed. Confirms the order's own delete doesn't reach into an
         // already-finished child's own journal.
         var itemHandle = harness.Client.For<ItemFulfillmentWorkflow>(itemId);
-        Assert.Equal(WorkflowStatus.Finished, await itemHandle.GetStatus(TimeSpan.FromSeconds(5)));
+        Assert.Equal(WorkflowStatus.Finished, await itemHandle.GetStatus(new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token));
     }
 }

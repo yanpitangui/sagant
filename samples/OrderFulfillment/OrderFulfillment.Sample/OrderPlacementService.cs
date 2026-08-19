@@ -24,16 +24,20 @@ public sealed class OrderPlacementService(IWorkflowClient client, OrderReadModel
         await repo.PlaceOrderAsync(orderId, customerId, items, "1 Main St");
 
         var workflow = client.For<OrderFulfillmentWorkflow>(orderId);
+        using var cts = new CancellationTokenSource(timeout ?? TimeSpan.FromSeconds(10));
         await workflow.Request<PlaceOrder, string>(
             new PlaceOrder(customerId, items, "1 Main St", faultStep, faultPermanent),
-            timeout: timeout ?? TimeSpan.FromSeconds(10));
+            cts.Token);
 
         return orderId;
     }
 
-    public Task<string> ApproveAsync(string orderId, TimeSpan? timeout = null) =>
-        client.For<OrderFulfillmentWorkflow>(orderId)
-            .Request<ApproveOrder, string>(new ApproveOrder(), timeout ?? TimeSpan.FromSeconds(10));
+    public async Task<string> ApproveAsync(string orderId, TimeSpan? timeout = null)
+    {
+        using var cts = new CancellationTokenSource(timeout ?? TimeSpan.FromSeconds(10));
+        return await client.For<OrderFulfillmentWorkflow>(orderId)
+            .Request<ApproveOrder, string>(new ApproveOrder(), cts.Token);
+    }
 
     /// <summary>Soft-deletes the read-model row directly, right after the engine confirms the
     /// delete — doesn't wait on <see cref="WorkflowEventLoggerActor"/>'s own
@@ -46,7 +50,8 @@ public sealed class OrderPlacementService(IWorkflowClient client, OrderReadModel
     /// writes its own read-model row synchronously, on the spot, with no notification to wait on.</summary>
     public async Task DeleteAsync(string orderId, TimeSpan? timeout = null)
     {
-        await client.For<OrderFulfillmentWorkflow>(orderId).Delete(timeout: timeout ?? TimeSpan.FromSeconds(10));
+        using var cts = new CancellationTokenSource(timeout ?? TimeSpan.FromSeconds(10));
+        await client.For<OrderFulfillmentWorkflow>(orderId).Delete(cancellationToken: cts.Token);
         await repo.SoftDeleteAsync(orderId);
     }
 }

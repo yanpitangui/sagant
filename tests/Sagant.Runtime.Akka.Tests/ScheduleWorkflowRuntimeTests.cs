@@ -89,7 +89,7 @@ public class ScheduleWorkflowRuntimeTests
                 .Request<StartSchedule, string>(
                     StartSchedule.For<ScheduledTaskWorkflow>(
                         new EverySpec(TimeSpan.FromSeconds(2)), new RunTask()),
-                    TimeSpan.FromSeconds(15));
+                    new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token);
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
             ScheduleStatus status;
@@ -97,7 +97,7 @@ public class ScheduleWorkflowRuntimeTests
             {
                 await Task.Delay(250, cts.Token);
                 status = await client.For<ScheduleWorkflow>("every-two-seconds")
-                    .Query<GetScheduleStatus, ScheduleStatus>(new GetScheduleStatus(), TimeSpan.FromSeconds(15));
+                    .Query<GetScheduleStatus, ScheduleStatus>(new GetScheduleStatus(), cts.Token);
             }
             while (status.FireCount < 1);
 
@@ -106,7 +106,7 @@ public class ScheduleWorkflowRuntimeTests
             // The occurrence's own instance ran, which is the half a schedule's own counters cannot
             // vouch for.
             var target = await client.For<ScheduledTaskWorkflow>(status.LastStartedEntityId!)
-                .GetStatus(TimeSpan.FromSeconds(15));
+                .GetStatus(cts.Token);
             Assert.Equal(WorkflowStatus.Finished, target);
         }
         finally
@@ -137,7 +137,7 @@ public class ScheduleWorkflowRuntimeTests
                 .Request<StartSchedule, string>(
                     StartSchedule.For<ScheduledTaskWorkflow>(
                         new EverySpec(TimeSpan.FromSeconds(6)), new RunTask()),
-                    TimeSpan.FromSeconds(15));
+                    new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token);
 
             // Read through the journal directly, so watching for the fire does not itself keep the
             // schedule resident — which would be the thing under test doing nothing.
