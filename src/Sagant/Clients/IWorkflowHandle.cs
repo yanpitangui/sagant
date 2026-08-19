@@ -153,6 +153,12 @@ public interface IWorkflowHandle
     /// Sends <paramref name="command"/>, then waits for the run to finish and returns how it ended
     /// along with its final state — going beyond a mere acknowledgement the command was accepted.
     ///
+    /// Fits a workflow bounded in seconds or minutes, where a caller can reasonably afford to hold
+    /// this wait open. For a workflow that might pause for hours or days, <see cref="Send{TCommand}"/>
+    /// to kick it off and <see cref="GetStatus"/>/the workflow's own <c>[WorkflowQuery]</c>s to check
+    /// on it fits that shape of wait far better than tying up a caller's own thread for however long
+    /// the run takes.
+    ///
     /// A failed run comes back as a <see cref="WorkflowResult{TState}"/> carrying
     /// <see cref="Sagant.Protocol.WorkflowOutcome.Failed"/>: a workflow that failed is a business
     /// result for the caller's own code to decide about, on its own terms, in its own control flow.

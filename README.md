@@ -82,6 +82,12 @@ define, register, drive. `IWorkflowClient`/
 `IWorkflowHandle<TWorkflow>` are the full public surface a caller ever touches: no `IActorRef`,
 `ActorRegistry`, or `ClusterSharding` type leaks into application code.
 
+`RunAndAwaitResult` fits here because `GreetingWorkflow` finishes in one quick step. It's the right
+choice for a workflow bounded in seconds or minutes — for anything that might pause for hours or
+days, `Send` to kick it off and `GetStatus`/a query to check on it later fits the shape of that wait
+far better than tying up a caller's own thread for however long the run takes. See
+[`docs/integration-guide.md`](docs/integration-guide.md#driving-a-workflow).
+
 ## A fuller example
 
 Real workflows add retries with failover, dependencies resolved from DI, and reads that don't wait

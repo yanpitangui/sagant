@@ -79,10 +79,13 @@ public sealed class OrderPlacementService(IWorkflowClient client)
 ```
 
 `IWorkflowHandle<TWorkflow>` also exposes `Send` (fire-and-forget) and `RunAndAwaitResult` (wait for
-the workflow to reach a terminal status and return its final state, typed). Pass an `idempotencyKey`
-to `Send`/`Request`/`RunAndAwaitResult` for a caller-driven retry after an ambiguous outcome to
-replay the cached reply, with the handler left uninvoked — see
-[akka-runtime.md](akka-runtime.md#akkadelivery-and-idempotency).
+the workflow to reach a terminal status and return its final state, typed). `RunAndAwaitResult` fits
+a workflow bounded in seconds or minutes, where a caller can reasonably afford to hold the wait open —
+for anything that might pause for hours or days, `Send` to kick it off and `GetStatus`/a
+`[WorkflowQuery]` to check on it fits the shape of that wait far better than tying up a caller's own
+thread for however long the run takes. Pass an `idempotencyKey` to `Send`/`Request`/`RunAndAwaitResult`
+for a caller-driven retry after an ambiguous outcome to replay the cached reply, with the handler left
+uninvoked — see [akka-runtime.md](akka-runtime.md#akkadelivery-and-idempotency).
 
 ## Deployment-level tuning
 

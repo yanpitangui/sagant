@@ -173,6 +173,13 @@ internal sealed class WorkflowRef<TWorkflow, TState>
     /// <summary>
     /// Sends <paramref name="command"/>, then waits for the workflow to reach a terminal status
     /// and returns its final state, going beyond a mere acknowledgement that the command was accepted.
+    /// Fits a workflow bounded in seconds or minutes — checkout, a short approval flow — where a
+    /// caller can reasonably afford to hold a wait open. For a workflow that might pause for hours or
+    /// days, <see cref="Send{TCommand}"/> to kick it off and <see cref="GetStatus"/>/the workflow's own
+    /// <c>[WorkflowQuery]</c>s to check on it fits the shape of that wait far better than tying up a
+    /// caller's own thread for however long the run takes. The retry loop below is about resilience —
+    /// a separate concern from whether holding the wait open that long is the right shape at all.
+    ///
     /// Takes `object` for the command parameter: this method is already generic over `TState`, and
     /// there's no single natural `TCommand` to add for a rarely-used method without an awkward third
     /// type parameter (Send/Ask above take a generic `TCommand` because they don't carry this
