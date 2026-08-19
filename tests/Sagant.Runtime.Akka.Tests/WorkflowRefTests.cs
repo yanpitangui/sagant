@@ -322,4 +322,44 @@ public class WorkflowRefTests : TestKit
         Assert.IsType<WorkflowOutcome.Completed>(result.Outcome);
         Assert.Equal("final-state", result.State);
     }
+
+    /// <summary>
+    /// The fix for the entity relocating mid-wait: WatchForCompletion's in-memory registration on the
+    /// pre-relocation incarnation is lost, so a caller that only ever asked once would hang until its
+    /// own overall CancellationToken gave up. Bounding each attempt to watchRetryInterval and re-asking
+    /// on a timeout is what lets a later attempt land on whichever incarnation now owns the entity.
+    ///
+    /// This test proves the retry mechanism itself fires on a timeout — a TestProbe standing in for
+    /// the shard region, exactly like the base test above. Proving a real relocation dropping the
+    /// registration mid-wait, against an actual cluster, remains open work for the chaos-test tier.
+    /// </summary>
+    [Fact]
+    public async Task RunAndAwaitResult_RetriesWatchForCompletion_WhenNoReplyWithinInterval()
+    {
+        var shardRegionProbe = CreateTestProbe();
+        var producerAdapterProbe = CreateTestProbe();
+        var workflowRef = new WorkflowRef<StubWorkflow, string>(
+            shardRegionProbe.Ref, producerAdapterProbe.Ref, "order-42", watchRetryInterval: TimeSpan.FromMilliseconds(100));
+
+        var resultTask = workflowRef.RunAndAwaitResult(new SomeCommand(3));
+
+        producerAdapterProbe.ExpectMsg<WorkflowProducerAdapter.Enqueue>();
+        producerAdapterProbe.LastSender.Tell(Done.Instance, producerAdapterProbe.Ref);
+
+        // First attempt: left unanswered on purpose, so it has to time out on its own. The timeout is
+        // exactly what a relocation-dropped registration looks like from WorkflowRef's own seat —
+        // indistinguishable from the entity genuinely still running.
+        var firstAttempt = shardRegionProbe.ExpectMsg<WorkflowEnvelope>();
+        Assert.IsType<WatchForCompletion<string>>(firstAttempt.Message);
+
+        // The retry: a second, independent WatchForCompletion, proving WorkflowRef asked again instead
+        // of giving up or hanging on the first attempt's dead promise.
+        var secondAttempt = shardRegionProbe.ExpectMsg<WorkflowEnvelope>(TimeSpan.FromSeconds(2));
+        Assert.IsType<WatchForCompletion<string>>(secondAttempt.Message);
+        shardRegionProbe.LastSender.Tell(
+            new WorkflowResult<string>.Finished(WorkflowOutcome.Completed.Instance, "final-state"), shardRegionProbe.Ref);
+
+        var result = Assert.IsType<WorkflowResult<string>.Finished>(await resultTask);
+        Assert.Equal("final-state", result.State);
+    }
 }

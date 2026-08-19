@@ -25,12 +25,20 @@ internal sealed class WorkflowRef<TWorkflow, TState>
 {
     private readonly IActorRef _shardRegion;
     private readonly IActorRef _producerAdapter;
+    private readonly TimeSpan _watchRetryInterval;
 
-    public WorkflowRef(IActorRef shardRegion, IActorRef producerAdapter, string entityId)
+    /// <summary><paramref name="watchRetryInterval"/> bounds each <see cref="RunAndAwaitResult"/>
+    /// attempt — see that method's own doc comment for why it retries at all. Internal to
+    /// <see cref="WorkflowRef{TWorkflow, TState}"/>, invisible past <c>IWorkflowHandle</c>; a test
+    /// injects a short one so the retry itself is fast to observe, production takes the
+    /// default.</summary>
+    public WorkflowRef(
+        IActorRef shardRegion, IActorRef producerAdapter, string entityId, TimeSpan? watchRetryInterval = null)
     {
         _shardRegion = shardRegion;
         _producerAdapter = producerAdapter;
         EntityId = entityId;
+        _watchRetryInterval = watchRetryInterval ?? TimeSpan.FromSeconds(10);
     }
 
     public string EntityId { get; }
@@ -175,6 +183,17 @@ internal sealed class WorkflowRef<TWorkflow, TState>
     /// <c>Done</c> ack before moving on to <see cref="WatchForCompletion{TState}"/> means a caller only
     /// starts watching once the command is durably queued for delivery — a stronger guarantee than a
     /// plain fire-and-forget <c>Tell</c> gives, which merely dispatches into the ether.
+    ///
+    /// <see cref="WatchForCompletion{TState}"/>'s registration on the entity side lives only in that
+    /// incarnation's own memory (<c>_pendingCompletionWatchers</c>) — a relocation or crash while a
+    /// caller is mid-wait drops it. Bounding each attempt to <see cref="_watchRetryInterval"/> and
+    /// re-asking on a timeout is what recovers from that: a re-ask is always safe regardless of why the
+    /// previous one went unanswered, since the entity's own reply comes straight off its durably
+    /// persisted status either way — still running answers nothing new (the retry just re-registers),
+    /// already finished answers immediately off that persisted state, whichever incarnation now holds
+    /// it. Only the read-only completion check repeats here, on this loop; the command itself is sent
+    /// exactly once, in the initial enqueue above — see
+    /// <see cref="WorkflowEntityActor{TWorkflow, TState}.HandleWatchForCompletion"/>.
     /// </summary>
     public async Task<WorkflowResult<TState>> RunAndAwaitResult(
         object command, string? idempotencyKey = null, CancellationToken cancellationToken = default)
@@ -183,7 +202,20 @@ internal sealed class WorkflowRef<TWorkflow, TState>
             EntityId, command, ReplyTo: null, IdempotencyKey: idempotencyKey, TraceParent: Activity.Current?.Id);
         await _producerAdapter.Ask<Done>(
             new WorkflowProducerAdapter.Enqueue(EntityId, envelope), Timeout.InfiniteTimeSpan, cancellationToken);
-        return await _shardRegion.Ask<WorkflowResult<TState>>(
-            new WorkflowEnvelope(EntityId, new WatchForCompletion<TState>()), Timeout.InfiniteTimeSpan, cancellationToken);
+
+        while (true)
+        {
+            try
+            {
+                return await _shardRegion.Ask<WorkflowResult<TState>>(
+                    new WorkflowEnvelope(EntityId, new WatchForCompletion<TState>()), _watchRetryInterval, cancellationToken);
+            }
+            catch (AskTimeoutException)
+            {
+                // No answer within this attempt's window — ask again. Covers both a run that's
+                // genuinely still going and a registration a relocation dropped; see the doc comment
+                // above for why the same retry is the right move either way.
+            }
+        }
     }
 }
