@@ -32,6 +32,21 @@ jobs:
       - name: Test
         run: dotnet test Sagant.slnx -c Release --logger:"trx;LogFilePrefix=testResults"
 
+      - name: Pack (verifies every packable project packs clean)
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          mkdir -p .artifacts
+
+          for project in src/**/*.csproj; do
+            if grep -Eq '<IsPackable>\s*false\s*</IsPackable>' "$project"; then
+              continue
+            fi
+
+            echo "Packing: $project"
+            dotnet pack "$project" --no-build -c Release -o .artifacts -p:PackageVersion=0.0.0-ci
+          done
+
       - name: Upload Test Result Files
         uses: actions/upload-artifact@v7
         if: always()

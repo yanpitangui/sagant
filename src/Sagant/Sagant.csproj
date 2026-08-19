@@ -26,7 +26,12 @@
     <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_PackSourceGeneratorAnalyzer</TargetsForTfmSpecificContentInPackage>
   </PropertyGroup>
 
-  <Target Name="_PackSourceGeneratorAnalyzer" DependsOnTargets="ResolveReferences">
+  <!-- No DependsOnTargets here: the path below is a hardcoded reach into the generator project's
+       own build output, so this target consumes nothing from ResolveReferences. Depending on it
+       anyway forces MSBuild to build the analyzer ProjectReference even under a NoBuild pack (an
+       analyzer reference is built regardless of ReferenceOutputAssembly=false), which trips
+       NETSDK1085 the moment NoBuild=true meets an explicit Build-target invocation. -->
+  <Target Name="_PackSourceGeneratorAnalyzer">
     <ItemGroup>
       <TfmSpecificPackageFile
         Include="$(MSBuildThisFileDirectory)..\Sagant.SourceGenerators\bin\$(Configuration)\netstandard2.0\Sagant.SourceGenerators.dll"
