@@ -387,9 +387,9 @@ its failure point once the underlying problem is fixed.
 The configured serializer governs how a changed state type reads back. Add fields as optional, never
 rename or retype in place, never remove a field a running instance might read on recovery.
 
-**No execution history, no enumeration.**
-The journal is pruned behind snapshots, notifications are fire-and-forget, and instances are
-addressable only by an id you already hold.
+**No unbounded execution history.**
+The journal is pruned behind snapshots (V5), so a rebuild's floor is an instance's most recent
+restart, never every event since the beginning for one that has restarted.
 
 ## Known limits
 
